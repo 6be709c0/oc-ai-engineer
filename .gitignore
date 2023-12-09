@@ -1,0 +1,9 @@
+.DS_Store
+.ipynb*
+*.csv
+fr.openfoodfacts.org.products.csv
+*.data
+*.names
+*.zip
+__pycache__
+*.xlsx
