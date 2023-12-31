@@ -100,3 +100,8 @@ TODO Next:
   - data with rank on all columns (avg delay, rfm score, categ)
   - data with rank on all columns (avg delay, rfm score, WITHOUT categ)
   - data with different PCA components
+
+
+- Check whatsapp for better understanding
+- What is ARI
+- Calculate ARI
