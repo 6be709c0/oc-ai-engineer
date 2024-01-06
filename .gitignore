@@ -7,3 +7,4 @@ fr.openfoodfacts.org.products.csv
 *.zip
 __pycache__
 *.xlsx
+models/
