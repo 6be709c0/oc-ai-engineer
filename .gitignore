@@ -8,3 +8,4 @@ fr.openfoodfacts.org.products.csv
 __pycache__
 *.xlsx
 models/
+tmp_*
