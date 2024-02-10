@@ -1,0 +1,14 @@
+tf-nightly
+scikit-learn
+pandas
+demoji
+tqdm
+gensim
+tensorflow-metal
+tensorflow-macos
+ipykernel
+matplotlib
+nltk
+mlflow
+hyperopt
+torch

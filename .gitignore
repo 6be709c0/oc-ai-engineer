@@ -9,3 +9,15 @@ __pycache__
 *.xlsx
 models/
 tmp_*
+*.tsv
+mlruns/
+old/
+dist/
+venv/
+*.h5
+*.keras
+*.pkl
+params.json
+glove/
+*.tar.gz
+aclImdb/
