@@ -21,3 +21,5 @@ params.json
 glove/
 *.tar.gz
 aclImdb/
+logs/
+results/
