@@ -1,0 +1,403 @@
+---
+title: Build a Sentiment Analysis API From Basic to BERT Using MLOps
+author: _
+description: Build a model, deploy it and analyze its performance!
+image:
+  url: "https://docs.astro.build/assets/arc.webp"
+  alt: "Thumbnail of Astro arcs"
+pubDate: 2024-02-12
+tags: ["ai", "sentiment-analysis", "mlops", "aws"]
+# relatedPosts: ["post-3"]
+---
+
+<img src="/post-img/sentiment-1.png" alt="Sentiment analysis API" />
+
+## Introduction
+
+Recognizing the sentiment of a text, whether it's positive or negative, is quite straightforward for a human.  
+You need to understand the sentence, the context, and you will get it without even thinking.
+
+Being able to recognize the sentiment of a text programmatically is quite different and requires proper training.  
+Once done, it can allow you to perform some tasks automatically:
+
+- Analyzing customer reviews,
+- Measuring social media post engagement,
+- Routing customer emails,
+- ...
+
+**So how can we teach our computers to do it too ?**
+
+It depends on your budget and what you want to achieve.
+
+- You could use or deploy a Large Language Models (LLM) such as ChatGPT, MistralAI, Gemini, Llama ...  
+  But it's a bit overkill and will consume a lot of computational resources, with a huge bill for a simple task,
+
+- You could use existing sentiment analysis API for a small price (Meaningcloud, Twinword, Amazon Comprehend ...),
+
+- You could build your own and train it with your own data.
+
+I like to get my hands dirty, and I want to optimize the price.  
+In this post, **we'll do it ourselves**.
+
+Not totally from scratch though, we'll use librairies like Tensorflow and Scikit-learn.
+
+The training is done on a MacBook Air Apple M2 with 24GB of Ram and the macOS version 14.3.1.
+
+## Model Exploration
+
+**The goal is to create an API that predicts the sentiment of a text.**  
+First, I need to create the model, I will train it based on <a href="https://www.kaggle.com/datasets/kazanova/sentiment140/data" target="_blank">1.6 millions tweets</a>.
+
+I test different models :
+
+- **A straightforward model**: Using Logistic regression
+- **An advanced model**: Using Deep learning neural network with Word2Vec or GloVe
+- **BERT model**: fine-tuning a pre-existing BERT model for our specific needs.
+
+In each case, the text will be cleaned using the same method, allowing us to compare the performance of the three and make a decision on which one to use.
+
+### Straightforward model
+
+<a
+  href="https://github.com/6be709c0/oc-ai-engineer/blob/main/OC/P7/output/2_scripts_notebook_mod%C3%A9lisation_022024_SIMPLE.ipynb"
+  target="_blank"
+>
+  Notebook
+</a>
+
+
+The simple model uses a <a href="https://scikit-learn.org/stable/modules/generated/sklearn.feature_extraction.text.CountVectorizer.html" target="_blank">CountVectorizer</a> as feature extraction to convert the text into a matrix of token counts.
+It then uses a <a href="https://scikit-learn.org/stable/modules/generated/sklearn.linear_model.LogisticRegression.html" target="_blank">LogisticRegression</a> model to fit the data and make the prediction. It is a statistical method used for binary classification.
+
+Here is the code used:
+
+```py
+# Copy original dataframe
+df_simple_approach = df.copy()
+
+X = df_simple_approach['comment_clean']
+y = df_simple_approach['sentiment']
+
+# Step 1: Split data
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# Step 2: Feature extraction
+vectorizer = CountVectorizer()
+X_train_counts = vectorizer.fit_transform(X_train)
+X_test_counts = vectorizer.transform(X_test)
+
+print("CountVectorizer Feature Extraction")
+print("X train before", X_train.shape)
+print("X train after", X_train_counts.shape)
+
+# Step 3: Train the model
+print("\nTraining the model...")
+model = LogisticRegression(solver='saga', max_iter=1000)
+model.fit(X_train_counts, y_train)
+print("Training done")
+
+# Step 4 predict
+y_pred = model.predict(X_test_counts)
+
+print(f"\nAccuracy: {accuracy_score(y_test, y_pred)*100:.2f}%")
+```
+
+The accuracy for this model is **79.23%**.  
+The model was trained in **8min**.
+
+**✅ Pros**
+
+- It's fast and simple to implement,
+- It works well with medium-sized dataset and uses fewer computational resources,
+- Using this model doesn't require a big set of libraries like Tensorflow, Scikit-learn is enough.
+
+**❌ Cons**
+
+- It doesn't understand the text. CountVectorizer counts the word occurrences,
+- Not efficient on large datasets.
+
+### Advanced model
+
+<a
+  href="https://github.com/6be709c0/oc-ai-engineer/blob/main/OC/P7/output/2_scripts_notebook_mod%C3%A9lisation_022024_ADVANCED_Tensorflow.ipynb"
+  target="_blank"
+>
+  Notebook
+</a>
+
+Here, I'm going to test two different feature extractions:
+
+- **Word2Vec** : It creates word vectors by predicting surrounding words in sentences, emphasizing word context
+- **GloVe**: It creates word vectors using global word co-occurrence, focusing on overall word relationships
+
+The model is the same for both, except the embedding layer:
+
+```py
+   Sequential([
+        embedding_layer,
+        Bidirectional(LSTM(config["vector_size"], dropout=0.3, return_sequences=True)),
+        Conv1D(config["vector_size"], 5, activation='relu'),
+        GlobalMaxPool1D(),
+        Dense(16, activation='relu'),
+        Dense(1, activation='sigmoid'),
+    ],
+    name="Sentiment_Model")
+```
+
+Let's look at each layer:
+
+- **Embedding Layer**: It transforms words into fixed-size vectors using Word2Vec or GloVe embeddings,
+- **Bidirectional LSTM Layer**: It captures context from both directions (past and future) in the sentence to understand the sequence better. Using LSTM (Long Short Term Memory) to retain information,
+- **Conv1D Layer**: It detects local patterns within the sequence,
+- **GlobalMaxPool1D Layer**: It simplifies the output from Conv1D by taking the maximum value,
+- **Dense Layer**: It processes the features into more abstract representations, facilitating complex relationships,
+- **Output Dense Layer**: It outputs the probability of the text being positive, a binary value.
+
+During the model creation, I test multiple hyperparameters to find the best model configuration.  
+Here are the different parameters used for both Word2Vec and GloVe:
+
+```py
+space = {
+    'batch_size': hp.choice('batch_size', [128, 256]),
+    'epochs': hp.choice('epochs', [2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]),
+    'learning_rate': hp.uniform('learning_rate', 0.0001, 0.001),
+}
+```
+
+- **batch_size**: How many text does the model process before updating itself,
+- **epochs**: How many times does the model goes through the entire data frame,
+- **learning_rate**: How quickly the model adjusts its parameters.
+
+**WORD2VEC Results**
+
+The best accuracy for this model is **82.86%**.  
+The best model was trained in **1h15min**.
+
+**✅ Pros**
+
+- Understand the context of a sentence,
+- Handle new words thanks to the embeddings of Word2Vec,
+- Can be used with other neural network architectures.
+
+**❌ Cons**
+
+- Requires more computational resources,
+- Not efficient with small datasets.
+
+**GloVe Results**
+
+The best accuracy for this model is **83.14%**.  
+The best model was trained in **1h45min**.
+
+**✅ Pros**
+
+- Pre-trained model,
+- Understand the context of a sentence,
+- A bit more efficient than Word2Vec, usually requires fewer data for better results.
+
+**❌ Cons**
+
+- Requires more computational resources,
+- Not efficient with small datasets.
+
+### BERT model
+
+<a
+  href="https://github.com/6be709c0/oc-ai-engineer/blob/main/OC/P7/output/2_scripts_notebook_mod%C3%A9lisation_022024_BERT.ipynb"
+  target="_blank"
+>
+  Notebook
+</a>
+
+BERT is developed by Google, it stands for "Bidirectional Encoder Representations from Transformers".
+It reads text in both directions and is pre-trained on a large corpus of text.
+
+Here I'm using <a href="https://huggingface.co/docs/transformers/model_doc/distilbert" target="_blank">DistilBert</a> because it's light and faster than the BERT model while preserving 95% of BERT.
+
+The accuracy for this model is **85.03%**.  
+The model was trained in **3h30**.
+
+**✅ Pros**
+
+- Pre-trained model,
+- Understand the sentence structure and meaning by considering the left and right context of a word,
+- Widely used and optimized (+40 millions download during January 2024)
+
+**❌ Cons**
+
+- Requires more computational resources,
+- Lots of parameters that can lead to overfitting.
+
+### Performance comparaison
+
+| Model                        | Training Time | Accuracy |
+| ---------------------------- | ------------- | -------- |
+| Straightforward model                 | 8min          | 79.23%   |
+| Advanced model with Word2Vec | 1h15          | 82.86%   |
+| Advanced model with GloVe    | 1h45          | 83.14%   |
+| BERT                         | 3h30          | 85%      |
+
+We can see that the BERT model has the best accuracy, but it's taking quite some time.
+
+In this post, I'm going to deploy the advanced model with GloVe because I could test different hyperparameters faster than BERT.
+
+## With MLOps
+
+Behind the curtains, I used MLOps to create, save, track and deploy the advanced models.  
+MLOps stands for Machine Learning Operations it's a set of practices to deploy and maintain ML models.
+
+The main keys of MLOps are:
+
+- **Automation**
+
+- **Continous Integration and Delivery (CI/CD)**
+
+- **Version control**
+
+- **Monitoring and validation**
+
+- **Collaboration and communication**
+
+- **Reproducibility**
+
+It's like DevOps adjusted for AI.  
+In this project, I'm using <a href="https://mlflow.org/" target="_blank">MLFlow</a>. It is an open-source MLOps platform.
+
+<img src="/post-img/sentiment-2.png" alt="MLFlow" />
+
+You can run it locally on your computer or use a remote version (<a href="https://www.databricks.com/product/managed-mlflow" target="_blank">with databricks</a> for example).
+
+It means that after each model is trained, I save the model, its parameters, and its accuracy within MLFlow.  
+Here, I'm running it locally, but MLFlow allow you to save the data remotely (I'm doing it on <a href="https://aws.amazon.com/s3/" target="_blank">AWS S3</a>) to reuse the models.
+
+### Experiments & Tracking
+
+Here is what some experiments look like with the advanced model on GloVe.
+<img src="/post-img/sentiment-3.png" alt="MLFlow" />
+
+You can see all the different tests, the duration and the parameters used.  
+You can quickly create some charts to visually see the different scores for each parameter.
+<img src="/post-img/sentiment-4.png" alt="MLFlow" />
+
+### Storage
+
+MLFlow allow you to save a model and serve it directly within a server.  
+Meaning that within your application, you connect to your mlflow server and load a specific model using tags and version aliases.
+
+You can also store other data as you like, linked to the model.
+
+In my case, I want to optimize the cost while running a live application. 
+
+I'm running MLFlow locally, so a remote application cannot connect to it to download a model.  
+So instead of using the model serving feature, I'm specifying the remote artifact path to use within the API.
+
+### API architecture
+
+The API is built within AWS. I use it because I'm familiar with it and the free tier allows me to run it for free.  
+
+It consists of two endpoints:
+
+- **sentiment.parf.ai/api/sentiment**: Get the prediction of a text,  
+It uses the model from mlflow and is built using Python.  
+
+- **sentiment.parf.ai/api/sentiment/feedback**: Send the feedback of the prediction (if it's correct or incorrect). 
+It saves the response within a DynamoDB database and sends a metric for tracking and alerting. It is built using Typescript.
+You can also get the latest 20 feedbacks using the GET Method. The POST method will save it.
+
+I invite you to read the <a href="https://github.com/emergy-official/sentiment.parf.ai/blob/main/api/readme.md">API Readme</a> if you want to use it
+
+Here is the serverless architecture:
+<img src="/post-img/sentiment-6.png" alt="Infrastructure" />
+
+- The API is behind a cloudfront, it can serve the website and the api.
+- It uses API Gateway to load the Lambda.
+
+This infrastructure is fully automated with Terraform, I'm not going to detail it here, but if you are interested, 
+feel free the checkout the infrastructure folder in the <a href="https://github.com/emergy-official/sentiment.parf.ai/tree/main/infrastructure" target="_blank">Github repository</a>.
+
+AWS allows you running 1 million requests per month for free, it is not limited to the Free Tier only.  
+It also depends on the compute usage and speed, in my case, the function is set up with 1GB of RAM, I can run ~40k requests per month, enough for this project.
+
+My usage on DynamoDB also falls within the always free limit.
+The only cost that can occurs is the storage part, which after a year will be $0.023 per GB (one experiment here takes less than 50mb), also the bandwidth, but it's nothing on my scale.
+
+### Versionning & CI/CD
+
+The API code is stored on <a href="https://github.com/emergy-official/sentiment.parf.ai/tree/main/api/sentiment" target="_blank">Github</a>.  
+If the commit message contains the text "deploy:sentiment", it will do the following:
+
+<img src="/post-img/sentiment-5.png" alt="Github action workflow" />
+
+1. It will download the artifacts,  
+I can modify the file `setup.env` to define which artifacts path to use:
+```py title="setup.env"
+API_ARTIFACT_PATH="657967221979013195/2f2f781caad24db9bbc386eef1fbde7b"
+```
+2. It will do some unit test (testing if a text predicted is positive and if one is negative),
+
+3. It will build an image that will be used within AWS Lambda,
+
+4. It will deploy the function to AWS Lambda.
+
+This is for the sentiment endpoint. For the feedback endpoint, it is similar, but it is deployed with the website since they share the same runtime.
+
+Here are some test examples of deployment within Github actions: 
+<img src="/post-img/sentiment-7.png" alt="Github actions" />
+
+You can easily see the ones that fail with details
+<img src="/post-img/sentiment-8.png" alt="Github unit test error" />
+
+## Web app
+
+The API is now up and running, and it would be great to test it.  
+
+For proof of concept, you can quickly build and deploy a model with <a href="https://streamlit.io/" target="_blank">Streamlit.io</a>.  
+In my case, I will build other projects around the same infrastructure in the future. I wanted something flexible, so I used  <a href="https://astro.build/" target="_blank">Astro.build</a>.  
+
+
+You can test the API within the web app:
+-  PROD: <a href="https://sentiment.parf.ai/" target="_blank">https://sentiment.parf.ai/</a>
+-  DEV: <a href="https://dev.sentiment.parf.ai/" target="_blank">https://dev.sentiment.parf.ai/</a>
+
+Since I want to optimize the cost, I don't use reserved Lambda so when the API is inactive for 15min, the container stops.
+It can take ~30sec to 1min to start, then it will take around 300ms per request.
+
+Here is what the web app looks like:
+<img src="/post-img/sentiment-9.png" alt="web app" />
+A random text is displayed (out of 14) from tweets in 2024, not trained.  
+You can enter whatever you want as well!
+
+Then, when you press predict, you get this response
+<img src="/post-img/sentiment-10.png" alt="web app response" />
+
+And don't hesitate to scroll to see the latest 20 feedbacks.
+<img src="/post-img/sentiment-11.png" alt="feedbacks from website" />
+
+### Alarms, Stats & Monitoring
+
+Wouldn't it be great to be alerted when the model is making too many errors ?  
+That's what the feedback API is for!
+
+Remember, when a user sends feedback, it pushes a metric to AWS Cloudwatch.
+Then all I need to do is to create an alarm that automatically triggers an email when I receive three errors within the last 5 minutes.
+
+<img src="/post-img/sentiment-12.png" alt="Email alarm" />
+
+Cloudwatch is not real-time, in this case, it can take up to 5min for the cloudwatch metrics to be stored and visible to the alarm.
+You could do it differently or pay for a high-frequency alarm that will check more often.
+
+But thanks to Cloudwatch, you can monitor the metrics and see how well your model performs and how many times it has been used over time.
+<img src="/post-img/sentiment-13.png" alt="AWS Graph" />
+
+### Model improvement
+
+If the model is making too many errors, you should update it.  
+And since this API is storing human feedback, you can export the feedback to CSV and use it to update the model.
+
+<img src="/post-img/sentiment-14.png" alt="AWS DynamoDB" />
+
+But be careful, you need to trust the users who provided the feedbacks, otherwise, you could add bias without knowing about it.
+
+Mission accomplished!
+
+<img src="/post-img/sentiment-15.png" alt="AWS DynamoDB" />
