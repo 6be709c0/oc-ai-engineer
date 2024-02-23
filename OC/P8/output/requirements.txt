@@ -1,0 +1,15 @@
+numpy
+pandas
+matplotlib
+tensorflow
+tqdm
+seaborn
+ipykernel
+pyarrow
+opencv-python
+torch
+torchvision
+scikit-learn
+
+tensorflow-metal
+tensorflow-macos

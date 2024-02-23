@@ -43,7 +43,8 @@ from torch.utils.data import Dataset
   
 # Utility and progress bar  
 from tqdm import tqdm
-
+# 
+from nltk.stem import WordNetLemmatizer, PorterStemmer
 def clean_df(dataframe):
     df = dataframe.copy()
     # Keep only comment and sentiment columns
@@ -83,8 +84,15 @@ def clean_tweet(doc):
     text = re.sub(r'[^a-zA-Z\s]', '', text)
     # Remove multiple spaces (replace them with a single space)  
     text = re.sub(r'\s+', ' ', text).strip()
+
+    # trans = WordNetLemmatizer()
+    # text = [trans.lemmatize(i) for i in text.split(" ")]
+    # trans = PorterStemmer()
+    # processed_tokens = [trans.stem(i) for i in text.split(" ")]
+    # text = [trans.lemmatize(i) for i in processed_tokens]
+
     
-    return text
+    return " ".join(text)
     
 def parallelize_on_rows(data, func):  
     r = Parallel(n_jobs=-1)(delayed(func)(i) for i in tqdm(data, desc="Processing"))  
@@ -194,11 +202,17 @@ def getModel(config, embedding_matrix):
                                 trainable=False)
 
     model = Sequential([
+        # Embedding Layer By Word2Vec Or Glove
         embedding_layer,
+        # Go forward and backward with long short term memory
         Bidirectional(LSTM(config["vector_size"], dropout=0.3, return_sequences=True)),
+        # Detect local patterns
         Conv1D(config["vector_size"], 5, activation='relu'),
+        # Simplify output of Conv1D
         GlobalMaxPool1D(),
+        # Simplify features into more abstract representation
         Dense(16, activation='relu'),
+        # Probability output from 0 to 1
         Dense(1, activation='sigmoid'),
     ],
     name="Sentiment_Model")

@@ -23,3 +23,6 @@ glove/
 aclImdb/
 logs/
 results/
+data/
+roulette/
+*.tar
