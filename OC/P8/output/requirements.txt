@@ -13,3 +13,6 @@ scikit-learn
 
 tensorflow-metal
 tensorflow-macos
+pandarallel
+
+albumentations
