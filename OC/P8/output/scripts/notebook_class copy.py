@@ -118,11 +118,11 @@ class NotebookProcessor:
         self.train_generator = DataGenerator(  
             image_paths=self.img["train"],     # Assuming you have lists of paths for images  
             mask_paths=self.mask["train"],     # and their corresponding masks  
-            batch_size=32,  
+            batch_size=self.cfg["batch_size"],  
             width=self.cfg["width"],
             height=self.cfg["height"],                # Change this to your desired input size  
             n_classes=self.cfg["classes"],                     # Change to your total number of classes; including background  
-            shuffle=None,  
+            shuffle=True,  
             augmentations=None  
         )  
         
@@ -130,7 +130,7 @@ class NotebookProcessor:
         self.val_generator = DataGenerator(  
             image_paths=self.img["val"],  
             mask_paths=self.mask["val"],  
-            batch_size=32,
+            batch_size=self.cfg["batch_size"],
             width=self.cfg["width"],
             height=self.cfg["height"],
             n_classes=self.cfg["classes"],  
@@ -175,41 +175,12 @@ class NotebookProcessor:
             callbacks=[early_stopping]
         )
         
-        self.model_fit_history = history
-        print("\nModel trained!\n")
-        
-    def model_fit_new(self):
-        
-        if(self.cfg["use_saved_model_path"]):
-            print("Skipping because of use_saved_model_path set in config")
-            print(f"Loading model from config {self.cfg['use_saved_model_path']}")
-            
-            model = tf.keras.models.load_model(self.cfg["use_saved_model_path"]) 
-            self.set_model(model)
-            
-            return
-    
-        early_stopping = tf.keras.callbacks.EarlyStopping(  
-            monitor='val_loss',   
-            min_delta=0.001,   
-            patience=10,   
-            verbose=1,   
-            restore_best_weights=True  
-        )
-
-        train_steps = len(self.img["train"])//self.cfg["batch_size"]
-        valid_steps = len(self.img["val"])//self.cfg["batch_size"]
-        
-        print(f"\nTrain steps: {train_steps}")
-        print(f"Balidation steps: {valid_steps}")
-        print("\n---------------------\n\n")
-        
-        history = self.model.fit(  
-            self.train_generator,  
-            validation_data=self.val_generator,  
-            epochs=self.cfg["epoch"],  
-            callbacks=[early_stopping]  
-        )
+        # history = self.model.fit(  
+        #     self.train_generator,  
+        #     validation_data=self.val_generator,  
+        #     epochs=self.cfg["epoch"],  
+        #     callbacks=[early_stopping]  
+        # )
         
         self.model_fit_history = history
         print("\nModel trained!\n")
@@ -225,7 +196,6 @@ class NotebookProcessor:
     def read_mask(self, x):  
         original_mask = cv2.imread(x, cv2.IMREAD_GRAYSCALE)   
         mask = np.zeros_like(original_mask, dtype=np.int32)  
-        print("READ")
     
         # Map each label in the original mask to its new category  
         for original_label, new_category in self.categories.items():  
@@ -268,7 +238,6 @@ class NotebookProcessor:
         
         image, mask = tf.numpy_function(f,[x,y],[tf.float32, tf.int32])
         mask = tf.one_hot(mask, self.cfg["classes"], dtype=tf.int32)
-        print("HEYA")
         
         image.set_shape([self.cfg["height"], self.cfg["width"], 3])    
         mask.set_shape([self.cfg["height"], self.cfg["width"], self.cfg["classes"]])

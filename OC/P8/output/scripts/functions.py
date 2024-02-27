@@ -128,3 +128,74 @@ def show_prediction(image, pred_mask):
     
     plt.tight_layout()
     plt.show()
+    
+def dice_coef(y_true, y_pred, smooth=1e-6):  
+    y_true_f = K.flatten(y_true)  
+    y_pred_f = K.flatten(y_pred)  
+    intersection = K.sum(y_true_f * y_pred_f)  
+    return (2. * intersection + smooth) / (K.sum(y_true_f) + K.sum(y_pred_f) + smooth)  
+  
+def iou(y_true, y_pred, smooth=1e-6):  
+    intersection = K.sum(K.abs(y_true * y_pred), axis=[1,2,3])  
+    union = K.sum(y_true,[1,2,3]) + K.sum(y_pred,[1,2,3]) - intersection  
+    return K.mean((intersection + smooth) / (union + smooth), axis=0)  
+
+def display_loss_accuracy_dice_iou(history):  
+    loss = history.history['loss']  
+    val_loss = history.history['val_loss']  
+    dice = history.history['dice_coef']  
+    val_dice = history.history['val_dice_coef']  
+    iou = history.history['iou']  
+    val_iou = history.history['val_iou']  
+      
+    _epochs = range(1, len(loss) + 1)  
+      
+    plt.figure(figsize=(16, 4))  # Increase the figure size for better visibility  
+      
+    # Plot for loss  
+    plt.subplot(1, 3, 1)  # 1 row, 4 columns, 1st subplot  
+    plt.plot(_epochs, loss, 'y', label='Training Loss')  
+    plt.plot(_epochs, val_loss, 'r', label='Validation Loss')  
+    plt.title('Training & Validation Loss')  
+    plt.xlabel('Epochs')  
+    plt.ylabel('Loss')  
+    plt.legend()  
+      
+    # Plot for Dice Coefficient  
+    plt.subplot(1, 3, 2)  # 1 row, 4 columns, 3rd subplot  
+    plt.plot(_epochs, dice, 'y', label='Training Dice Coef')  
+    plt.plot(_epochs, val_dice, 'r', label='Validation Dice Coef')  
+    plt.title('Training & Validation Dice Coefficient')  
+    plt.xlabel('Epochs')  
+    plt.ylabel('Dice Coeff')  
+    plt.legend()  
+      
+    # Plot for IoU  
+    plt.subplot(1, 3, 3)  # 1 row, 4 columns, 4th subplot  
+    plt.plot(_epochs, iou, 'y', label='Training IoU')  
+    plt.plot(_epochs, val_iou, 'r', label='Validation IoU')  
+    plt.title('Training & Validation IoU')  
+    plt.xlabel('Epochs')  
+    plt.ylabel('IoU')  
+    plt.legend()  
+      
+    plt.tight_layout()  # Automatically adjust subplot params to give specified padding  
+    plt.show()  
+    
+def display_images_from_tf_dataset(dataset, num_images=5):  
+    # Make sure our dataset iterates only once through a portion of the data by using take  
+    for images, masks in dataset.take(1):  # Taking 1 batch from the dataset  
+        plt.figure(figsize=(10, 2 * num_images))  # Adjust figure size as needed  
+        for i in range(num_images):  
+            plt.subplot(num_images, 2, 2*i + 1)  
+            plt.imshow(images[i].numpy())  # Convert to numpy and display the image  
+            plt.title("Image")  
+            plt.axis("off")  
+            
+            plt.subplot(num_images, 2, 2*i + 2)  
+            plt.imshow(masks[i].numpy(), cmap='gray')  # Display the mask  
+            plt.title("Mask")  
+            plt.axis("off")  
+        plt.tight_layout()  
+        plt.show()  
+        break 

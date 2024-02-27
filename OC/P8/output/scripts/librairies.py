@@ -9,11 +9,23 @@ import numpy as np  # For numerical operations
 import pandas as pd  # For data manipulation and analysis  
 from sklearn.metrics import confusion_matrix  # For evaluating the accuracy of a classification  
 from sklearn.model_selection import train_test_split  # For splitting data arrays into training and testing subsets  
-  
+import albumentations as A  
+from albumentations import HorizontalFlip, VerticalFlip, Rotate  
+
 # Machine Learning and Neural Network frameworks  
 import tensorflow as tf  # For numerical computation using data flow graphs  
 from keras.layers import (BatchNormalization, Conv2D, Conv2DTranspose, Dropout, Input,  
                           Lambda, MaxPooling2D, UpSampling2D, concatenate)  
+from tensorflow.keras import backend as K  
+from tensorflow.keras.layers.experimental.preprocessing import (  
+    RandomFlip,  
+    RandomRotation,  
+    RandomZoom,  
+    RandomTranslation,  
+    RandomContrast,  
+    RandomCrop,  
+    Resizing  
+)  
 from keras.models import Model  # Keras is used for building and training neural networks  
 from tensorflow.keras.utils import Sequence  # For generating batches of tensor image data  
 from tensorflow.keras.applications.vgg16 import VGG16
