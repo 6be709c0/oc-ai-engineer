@@ -14,5 +14,9 @@ scikit-learn
 tensorflow-metal
 tensorflow-macos
 pandarallel
+ipywidgets
 
 albumentations
+transformers
+datasets
+evaluate

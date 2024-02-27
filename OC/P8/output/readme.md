@@ -1,3 +1,8 @@
-1. https://www.youtube.com/watch?v=IHq1t7NxS8k
+Metrics:
+Intersection-over-Union (IoU)
+Average Precision
+MEan Average Precision
 
-2. https://medium.com/@mhamdaan/multi-class-semantic-segmentation-with-u-net-pytorch-ee81a66bba89
+
+SAM > https://github.com/huggingface/notebooks/blob/main/examples/segment_anything.ipynb
+Transformers tutorials Segformer > https://github.com/NielsRogge/Transformers-Tutorials/tree/master/SegFormer
