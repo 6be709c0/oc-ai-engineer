@@ -20,3 +20,4 @@ albumentations
 transformers
 datasets
 evaluate
+mlflow

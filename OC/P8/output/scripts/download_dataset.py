@@ -36,4 +36,46 @@ def unzip_dataset(config):
     # Unzip leftImg8bit  
     if os.path.isfile(leftImg8bit_path):  
         subprocess.run(["unzip", "-q", "-n", leftImg8bit_path, "-d", "data/"], check=True)  
-        subprocess.run(["rm", leftImg8bit_path], check=False)  # check=False because deletion is not critical  
+        subprocess.run(["rm", leftImg8bit_path], check=False)  # check=False because deletion is not critical
+          
+def move_val_test(config):  
+    data_path = config["data_path"]
+    
+    data_paths_to_delete_gtFine = [  
+        os.path.join(data_path, "test/berlin"),  
+        os.path.join(data_path, "test/bielefeld"),  
+        os.path.join(data_path, "test/bonn"),  
+        os.path.join(data_path, "test/leverkusen"),  
+        os.path.join(data_path, "test/mainz"),  
+        os.path.join(data_path, "test/munich")  
+    ]
+    
+    data_paths_to_delete_leftImg8bit = [  
+        os.path.join(data_path, "..", "leftImg8bit", "test/berlin"),  
+        os.path.join(data_path, "..", "leftImg8bit", "test/bielefeld"),  
+        os.path.join(data_path, "..", "leftImg8bit", "test/bonn"),  
+        os.path.join(data_path, "..", "leftImg8bit", "test/leverkusen"),  
+        os.path.join(data_path, "..", "leftImg8bit", "test/mainz"),  
+        os.path.join(data_path, "..", "leftImg8bit", "test/munich")  
+    ]  
+      
+    data_paths_to_move_gtFine = [  
+        os.path.join(data_path, "val/munster"),  
+    ]  
+      
+    data_paths_to_move_leftImg8bit = [  
+        os.path.join(data_path, "..", "leftImg8bit", "val/munster"),  
+    ]  
+    
+    # Delete the specified directories  
+    for directory in data_paths_to_delete_gtFine + data_paths_to_delete_leftImg8bit:  
+        if os.path.exists(directory):  
+            shutil.rmtree(directory)
+            print(f"- Deleted directory: {directory}")
+    
+     # Move the specified directories  
+    for src_dir in data_paths_to_move_gtFine + data_paths_to_move_leftImg8bit:  
+        destination = src_dir.replace("val", "test")
+        if os.path.exists(src_dir):  
+            shutil.move(src_dir, destination)  
+            print(f"Moved {src_dir} to {destination}")  

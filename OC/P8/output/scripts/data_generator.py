@@ -14,10 +14,11 @@ class DataGenerator(Sequence):
         'vehicle': [26, 27, 28, 29, 30, 31, 32, 33, -1]  
     } 
     
-    def __init__(self, img_paths, mask_paths, batch_size, config, shuffle=True):  
+    def __init__(self, img_paths, mask_paths, batch_size, config, shuffle=True, augmentation=None):  
         self.img_paths = img_paths  
         self.mask_paths = mask_paths  
-        self.batch_size = batch_size  
+        self.batch_size = batch_size
+        self.augmentation = augmentation
         self.cfg = config  
         self.shuffle = shuffle  
         self.indexes = np.arange(len(self.img_paths))  
@@ -47,35 +48,44 @@ class DataGenerator(Sequence):
   
     def __data_generation(self, batch_indexes):  
         # Initialization  
-        X = np.empty((self.batch_size,self.cfg["height"],self.cfg["width"], 3))  
-        y = np.empty((self.batch_size,self.cfg["height"],self.cfg["width"], self.cfg["classes"]), dtype=int)  
-  
+        if self.augmentation:  
+            X = np.empty((self.batch_size * self.cfg["augment_per_image"],self.cfg["height"],self.cfg["width"], 3))  
+            y = np.empty((self.batch_size * self.cfg["augment_per_image"],self.cfg["height"],self.cfg["width"], self.cfg["classes"]), dtype=int)  
+        else:
+            X = np.empty((self.batch_size, self.cfg["height"],self.cfg["width"], 3))  
+            y = np.empty((self.batch_size, self.cfg["height"],self.cfg["width"], self.cfg["classes"]), dtype=int)  
+        
+        ctr = 0
         # Generate data  
         for i, idx in enumerate(batch_indexes):  
             img_path = self.img_paths[idx]  
             mask_path = self.mask_paths[idx]  
   
-            # Store sample  
             image = self.__read_image(img_path)  
-              
-            # Store class  
             mask = self.__read_mask(mask_path)  
             
-            mask = tf.one_hot(mask, self.cfg["classes"], dtype=tf.int32).numpy()
-            
-            # image.set_shape([self.cfg["height"], self.cfg["width"], 3])    
-            # mask.set_shape([self.cfg["height"], self.cfg["width"], self.cfg["classes"]])
-        
-            # # Store sample  
-            X[i,] = image  
-              
-            # Store class  
-            y[i,] = mask
-  
-        # y = np.expand_dims(y, -1) # Optionally, make sure the mask has the correct shape  
+            if self.augmentation:
+                for n in range(self.cfg["augment_per_image"]):
+                    # Apply augmentations  
+                    augmented = self.augmentation(image=image, mask=mask)  
+                    aug_image = augmented['image']  
+                    aug_mask = augmented['mask']
+                    aug_mask = tf.one_hot(aug_mask, self.cfg["classes"], dtype=tf.int32).numpy()
+                    X[ctr,] = aug_image
+                    y[ctr,] = aug_mask
+                    ctr +=1
+                
+                # # Add the original image as well
+                # mask = tf.one_hot(mask, self.cfg["classes"], dtype=tf.int32).numpy()
+                # X[ctr,] = image
+                # y[ctr,] = mask
+                
+            else:
+                mask = tf.one_hot(mask, self.cfg["classes"], dtype=tf.int32).numpy()
+                X[i,] = image
+                y[i,] = mask
+                
         return X, y
-        # y = np.expand_dims(y, -1) # Optionally, make sure the mask has the correct shape  
-        # return X, np.array(y).astype(np.float32)  
   
     # You can reuse the read_image and read_mask methods from NotebookProcessor here  
     # or implement them directly inside this class.  

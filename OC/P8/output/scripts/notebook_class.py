@@ -1,7 +1,7 @@
 from librairies import *
 from download_dataset import *
 from functions import *
-from data_generator import *
+from data_generator import DataGenerator
 
 class NotebookProcessor:
     categories = {  
@@ -15,32 +15,15 @@ class NotebookProcessor:
         'vehicle': [26, 27, 28, 29, 30, 31, 32, 33, -1]  
     }  
     
-    category_mapping_polygons = {    
-        # void    
-        "ground": 0, "dynamic": 0, "static": 0, "out of roi": 0, "ego vehicle": 0,
-        # flat    
-        "road": 1, "sidewalk": 1, "parking": 1, "rail track": 1,  
-        # construction    
-        "building": 2, "wall": 2, "fence": 2, "guard rail": 2, "bridge": 2, "tunnel": 2,    
-        # object    
-        "pole": 3, "polegroup": 3, "traffic sign": 3, "traffic light": 3,    
-        # nature    
-        "vegetation": 4, "terrain": 4,    
-        # sky    
-        "sky": 5,    
-        # human    
-        "person": 6, "rider": 6, "persongroup": 6,    
-        # vehicle    
-        "car": 7, "truck": 7, "bus": 7, "on rails": 7, "motorcycle": 7, "bicycle": 7,  "bicyclegroup": 7, "caravan": 7, "trailer": 7,  
-        "cargroup": 7, "license plate": 7, "train": 7, "motorcyclegroup": 7, "ridergroup": 7, "truckgroup": 7, "rectification border": 7,  
-    }
-    
     def __init__(self, config):  
         self.cfg = config  
         self.prepare_notebook()
         
-        self.category_ids = {cat: idx for idx, cat in enumerate(self.categories.keys())} 
-  
+        self.category_ids = {cat: idx for idx, cat in enumerate(self.categories.keys())}
+        
+        if self.cfg["mlwflow_tracking_uri"]:
+            mlflow.set_tracking_uri(uri=self.cfg["mlwflow_tracking_uri"])
+        
     def print_config(self):  
         display(HTML('<h1 style="padding:0;margin:0;"><b>CONFIG USED</b></h1>'))    
         print(json.dumps(self.cfg, indent=4), "\n")  
@@ -48,8 +31,7 @@ class NotebookProcessor:
     def set_model(self, model):  
         self.model = model
         
-        model.compile(optimizer="adam", loss=['categorical_crossentropy'], metrics=["accuracy"])
-        # model.compile(optimizer="adam", loss=['categorical_crossentropy'], metrics=[dice_coef, iou, "accuracy"])
+        model.compile(optimizer="adam", loss=['categorical_crossentropy'], metrics=[dice_coef, iou, "accuracy"])
         model.summary()
 
     def set_dataframes(self):  
@@ -69,8 +51,6 @@ class NotebookProcessor:
         if self.cfg["train_sample_nb"] > 0:
             print(f"\n- Sampling the training dataset from {df_train.shape[0]} to {self.cfg['train_sample_nb']}.")
             df_train = df_train.sample(n=self.cfg["train_sample_nb"], random_state=42).reset_index(drop=True)
-            # df_test = df_test.sample(n=sample_dataset, random_state=42).reset_index(drop=True)
-            # df_val = df_val.sample(n=100, random_state=42).reset_index(drop=True)
         else:
             print("- Using the full training dataset")
             
@@ -98,45 +78,20 @@ class NotebookProcessor:
             "val": df_val["label_ids_img_path"].tolist(),
         }
         
-        self.mask_polygons = {
-            "train": df_train["polygons_json_path"].tolist(),
-            "test": df_test["polygons_json_path"].tolist(),
-            "val": df_val["polygons_json_path"].tolist(),
-        }
+        # Define an augmentation pipeline  
+        augmentation_pipeline = A.Compose([      
+            A.HorizontalFlip(p=0.5),  
+            A.ShiftScaleRotate(shift_limit=0.05, scale_limit=0.05, rotate_limit=15, border_mode=0, p=0.5),
+            A.RandomResizedCrop(height=self.cfg["height"], width=self.cfg["width"], scale=(0.8, 1.0), ratio=(0.75, 1.33), p=0.5),
+        ])
         
-        self.tf_ds = {
-            "train": self.tf_dataset(self.img["train"], self.mask["train"], self.cfg["batch_size"]),
-            "val": self.tf_dataset(self.img["val"], self.mask["val"], self.cfg["batch_size"]),
-        }
-        
-        augmentations = A.Compose([  
-            HorizontalFlip(p=0.5),  
-            VerticalFlip(p=0.5),  
-            Rotate(limit=45, p=0.5),  
-        ])  
-        
-        self.train_generator = DataGenerator(  
-            image_paths=self.img["train"],     # Assuming you have lists of paths for images  
-            mask_paths=self.mask["train"],     # and their corresponding masks  
-            batch_size=32,  
-            width=self.cfg["width"],
-            height=self.cfg["height"],                # Change this to your desired input size  
-            n_classes=self.cfg["classes"],                     # Change to your total number of classes; including background  
-            shuffle=None,  
-            augmentations=None  
-        )  
-        
-        # Initialize the DataGenerator for validation  
-        self.val_generator = DataGenerator(  
-            image_paths=self.img["val"],  
-            mask_paths=self.mask["val"],  
-            batch_size=32,
-            width=self.cfg["width"],
-            height=self.cfg["height"],
-            n_classes=self.cfg["classes"],  
-            shuffle=False,  # Typically, shuffling is not necessary for validation/testing  
-            augmentations=None  
-        )  
+        if self.cfg["use_augment"]:
+            self.train_generator = DataGenerator(self.img['train'], self.mask['train'], self.cfg['batch_size'], self.cfg, shuffle=True, augmentation=augmentation_pipeline)  
+        else:
+            self.train_generator = DataGenerator(self.img['train'], self.mask['train'], self.cfg['batch_size'], self.cfg, shuffle=True, augmentation=None)  
+            
+        self.val_generator = DataGenerator(self.img['val'], self.mask['val'], self.cfg['batch_size'], self.cfg, shuffle=False)  
+        self.test_generator = DataGenerator(self.img['test'], self.mask['test'], self.cfg['batch_size'], self.cfg, shuffle=False)  
         
     def model_save(self, path):
         self.model.save(path)
@@ -160,58 +115,42 @@ class NotebookProcessor:
             restore_best_weights=True  
         )
 
-        train_steps = len(self.img["train"])//self.cfg["batch_size"]
-        valid_steps = len(self.img["val"])//self.cfg["batch_size"]
-        
-        print(f"\nTrain steps: {train_steps}")
-        print(f"Balidation steps: {valid_steps}")
-        print("\n---------------------\n\n")
-        
-        history = self.model.fit(self.tf_ds["train"],
-            steps_per_epoch=train_steps,
-            validation_data=self.tf_ds["val"],
-            validation_steps=valid_steps,
-            epochs=self.cfg["epoch"],
-            callbacks=[early_stopping]
-        )
-        
-        self.model_fit_history = history
-        print("\nModel trained!\n")
-        
-    def model_fit_new(self):
-        
-        if(self.cfg["use_saved_model_path"]):
-            print("Skipping because of use_saved_model_path set in config")
-            print(f"Loading model from config {self.cfg['use_saved_model_path']}")
-            
-            model = tf.keras.models.load_model(self.cfg["use_saved_model_path"]) 
-            self.set_model(model)
-            
-            return
-    
-        early_stopping = tf.keras.callbacks.EarlyStopping(  
-            monitor='val_loss',   
-            min_delta=0.001,   
-            patience=10,   
-            verbose=1,   
-            restore_best_weights=True  
-        )
-
-        train_steps = len(self.img["train"])//self.cfg["batch_size"]
-        valid_steps = len(self.img["val"])//self.cfg["batch_size"]
-        
-        print(f"\nTrain steps: {train_steps}")
-        print(f"Balidation steps: {valid_steps}")
-        print("\n---------------------\n\n")
-        
-        history = self.model.fit(  
-            self.train_generator,  
-            validation_data=self.val_generator,  
-            epochs=self.cfg["epoch"],  
-            callbacks=[early_stopping]  
-        )
-        
-        self.model_fit_history = history
+        if(self.cfg["mlwflow_tracking_uri"]):
+            mlflow.set_experiment(self.cfg["mlwflow_experiment_title"])  
+            with mlflow.start_run():
+                
+                mlflow.log_params(self.cfg)    
+                
+                history = self.model.fit(  
+                    self.train_generator,  
+                    validation_data=self.val_generator,  
+                    epochs=self.cfg["epoch"],  
+                    callbacks=[early_stopping]  # Assuming early_stopping callback is defined  
+                ) 
+                
+                mlflow.log_metric("best_loss", min(history.history['loss']))
+                mlflow.log_metric("best_dice_coef", min(history.history['dice_coef']))
+                mlflow.log_metric("best_iou", min(history.history['dice_iou']))
+                mlflow.log_metric("best_accuracy", max(history.history['accuracy']))
+                
+                
+                mlflow.log_metric("best_val_accuracy", max(history.history['val_accuracy']))
+                mlflow.log_metric("best_val_loss", min(history.history['val_loss']))          
+                mlflow.log_metric("best_val_dice_coef", min(history.history['val_dice_coef']))
+                mlflow.log_metric("best_val_iou", min(history.history['val_dice_iou']))
+                
+                self.model.save("model.keras")
+                mlflow.log_artifact('model.keras')
+                
+                self.model_fit_history = history
+        else:
+            history = self.model.fit(  
+                self.train_generator,  
+                validation_data=self.val_generator,  
+                epochs=self.cfg["epoch"],  
+                callbacks=[early_stopping]  # Assuming early_stopping callback is defined  
+            ) 
+            self.model_fit_history = history
         print("\nModel trained!\n")
         
     def read_image(self, x):  
@@ -225,7 +164,6 @@ class NotebookProcessor:
     def read_mask(self, x):  
         original_mask = cv2.imread(x, cv2.IMREAD_GRAYSCALE)   
         mask = np.zeros_like(original_mask, dtype=np.int32)  
-        print("READ")
     
         # Map each label in the original mask to its new category  
         for original_label, new_category in self.categories.items():  
@@ -240,63 +178,11 @@ class NotebookProcessor:
     
         return mask  
     
-    def read_mask_polygons(self, path):  
-        mask_img_array = polygon_to_mask_img(path, self.category_mapping_polygons)
-        color_map = mpl.colormaps.get_cmap('viridis')  
-        
-        mask_img = cv2.resize(mask_img_array, (self.cfg["width"], self.cfg["height"]))  
-        return mask_img.astype(np.int32)
-    
-    
-    def preprocess_test(self, x):
-        def f(x):
-            x = x.decode()
-            image = self.read_image(x)
-            return image
-        
-        image = tf.convert_to_tensor(tf.numpy_function(f, [x] , [tf.float32]))
-        image = tf.reshape(image, (self.cfg["height"], self.cfg["width"], 3))  
-        return image
-        
-    def preprocess(self, x,y):
-        def f(x,y):
-            x = x.decode() ##byte stream conversion
-            y = y.decode()
-            image = self.read_image(x)
-            mask = self.read_mask(y)
-            return image, mask
-        
-        image, mask = tf.numpy_function(f,[x,y],[tf.float32, tf.int32])
-        mask = tf.one_hot(mask, self.cfg["classes"], dtype=tf.int32)
-        print("HEYA")
-        
-        image.set_shape([self.cfg["height"], self.cfg["width"], 3])    
-        mask.set_shape([self.cfg["height"], self.cfg["width"], self.cfg["classes"]])
-        # mask.set_shape([self.cfg["height"], self.cfg["width"], self.cfg["classes"]])
-        
-        return image, mask
-    
-    def tf_dataset(self, x,y, batch=4):
-        dataset = tf.data.Dataset.from_tensor_slices((x,y)) # Dataset data object created from input and target data
-        dataset = dataset.shuffle(buffer_size=100) ## selected from the first 100 samples
-        dataset = dataset.map(self.preprocess) # Applying preprocessing to every batch in the Dataset object
-        
-        dataset = dataset.batch(batch) # Determine batch-size
-        dataset = dataset.repeat()
-        dataset = dataset.prefetch(2) # Optimization to reduce waiting time on each object
-        return dataset
-  
-    def test_dataset(self, x, batch=32):
-        dataset = tf.data.Dataset.from_tensor_slices(x)
-        dataset = dataset.map(self.preprocess_test)
-        dataset = dataset.batch(batch)
-        dataset = dataset.prefetch(2)
-        return dataset
-    
     def prepare_notebook(self):  
         self.print_config()  
         download_dataset(self.cfg)  
         unzip_dataset(self.cfg)
+        move_val_test(self.cfg)
         
         self.set_dataframes()
           
@@ -307,28 +193,42 @@ class NotebookProcessor:
         mask_img_colored = color_map(mask_img_array_normalized)[:, :, :3]  # Exclude the alpha channel  
         mask_img_colored = (mask_img_colored * 255).astype(np.uint8)  
         
-        print("AA", image.shape)
-        print("BB", mask_img_colored.shape)
-        
         overlayed = cv2.addWeighted(src1=image, alpha=(1-mask_opacity), src2=mask_img_colored.astype(np.float32)/255.0, beta=mask_opacity, gamma=0)  
         
         return overlayed
     
     def model_predict_with_display_and_accuracy(self, image_path, truth_mask_path):  
+        # Reading and preprocessing the image and mask    
         image = self.read_image(image_path)  
-        image_to_predict = np.expand_dims(image, axis=0)  # Add batch dimension  
-
-        ground_truth_mask = self.read_mask(truth_mask_path)
-        ground_truth_mask = cv2.resize(ground_truth_mask, (self.model.input_shape[2], self.model.input_shape[1]), interpolation=cv2.INTER_NEAREST)  # Resizing to match the model's input  
-
-        # Predict the mask using the model  
-        prediction = self.model.predict(image_to_predict)
-        predicted_mask = tf.argmax(prediction, axis=-1)[0]
-        predicted_mask_np = predicted_mask.cpu().numpy()
+        image_to_predict = np.expand_dims(image, axis=0)  # Adding batch dimension  
+        ground_truth_mask = self.read_mask(truth_mask_path)  
+        ground_truth_mask = cv2.resize(ground_truth_mask, (self.model.input_shape[2], self.model.input_shape[1]), interpolation=cv2.INTER_NEAREST)  
+    
+        # Prediction and calculation of correct predictions and accuracy  
+        prediction = self.model.predict(image_to_predict)  
+        predicted_mask = tf.argmax(prediction, axis=-1)[0]  
+        predicted_mask_np = predicted_mask.numpy()  # Adjust for TensorFlow 2.x  
+        correct_predictions_image = np.where((predicted_mask_np[:, :, None] == ground_truth_mask[:, :, None]), image, 1)  # Replacing incorrect predictions with black  
         correct_predictions_mask = np.where(predicted_mask == ground_truth_mask, predicted_mask, np.nan)  # Use np.nan for non-correct pixels    
-        correct_predictions_image = np.where(np.expand_dims(predicted_mask_np == ground_truth_mask, axis=-1), image, 1) # This replaces incorrect predictions with black  
-        accuracy = np.mean(predicted_mask == ground_truth_mask)  # Assumes truth_mask is already an int32 numpy array of labels  
+        accuracy = np.mean(predicted_mask_np == ground_truth_mask)  
+    
+        # Calculating per-class accuracy  
+        unique_classes_in_truth = np.unique(ground_truth_mask)  # Find unique classes in the ground truth mask  
+        conf_matrix = confusion_matrix(ground_truth_mask.flatten(), predicted_mask_np.flatten(), labels=unique_classes_in_truth)  
+        per_class_accuracy = np.nan_to_num(conf_matrix.diagonal() / conf_matrix.sum(axis=1))
+        categories = ['void', 'flat', 'construction', 'object', 'nature', 'sky', 'human', 'vehicle']  
+    
+        # Filtering categories, accuracies, and pixel counts based on what's present in the ground truth  
+        present_categories = np.array(categories)[unique_classes_in_truth]  
+        sorted_indices_desc = np.argsort(per_class_accuracy)[::-1]  
+        sorted_accuracies_desc = per_class_accuracy[sorted_indices_desc]  
+        sorted_categories_desc = present_categories[sorted_indices_desc]  
+        sorted_pixel_counts_desc = np.array([np.sum(ground_truth_mask == i) for i in unique_classes_in_truth])[sorted_indices_desc]  
+    
+        # Converting accuracies to percentages  
+        sorted_accuracies_percent_desc = sorted_accuracies_desc * 100  
         
+        # Including accuracy print for clarity  
         show_grid_prediction(
             image, 
             ground_truth_mask, 
@@ -337,112 +237,38 @@ class NotebookProcessor:
             correct_predictions_image,
             accuracy
         )
-         
-    
-    def model_predict_with_display_and_accurac_deprecated(self, image_path, truth_mask_path):  
-        # Load and preprocess the image  
-        image = self.read_image(image_path)
-        image_to_predict = np.expand_dims(image, axis=0)  # Add batch dimension  
         
-        # Load and preprocess the truth mask  
-        truth_mask = self.read_mask(truth_mask_path)  # Using the read mask function defined earlier  
-        truth_mask_resized = cv2.resize(truth_mask, (self.model.input_shape[2], self.model.input_shape[1]), interpolation=cv2.INTER_NEAREST)  # Resizing to match the model's input  
-    
-        # Predict the mask using the model  
-        prediction = self.model.predict(image_to_predict)  
-        predicted_mask = tf.argmax(prediction, axis=-1)[0]  # Remove batch dimension and convert prediction to class labels  
-    
-        # Calculate accuracy  
-        accuracy = np.mean(predicted_mask == truth_mask_resized)  # Assumes truth_mask is already an int32 numpy array of labels  
+        # Plotting  
+        fig, axs = plt.subplots(1, 2, figsize=(20, 5))  # Adjusted figsize for potentially better layout  
+        axs[0].barh(sorted_categories_desc, sorted_accuracies_percent_desc, color='skyblue', height=0.5)  # Adjusted bar width  
+        axs[0].set_xlabel('Accuracy (%)', fontsize=12)  # Adjusted font size  
+        axs[0].set_title('Pixel accuracy per class', fontsize=14)  # Adjusted font size  
+        axs[0].tick_params(axis='both', which='major', labelsize=10)  # Adjusted tick label size  
+        axs[0].grid(True, linestyle='--', linewidth=0.5)  # Added gridlines  
         
-        overlay_img = self.read_overlay_pred(image, predicted_mask.numpy())
+        for index, value in enumerate(sorted_accuracies_percent_desc):  
+            axs[0].text(value + 1, index, f'{value:.2f}%', va='center', fontsize=10)  # Adjusted text positioning and font size  
         
-        correct_predictions_mask = np.where(predicted_mask == truth_mask_resized, predicted_mask, np.nan)  # Use np.nan for non-correct pixels    
-        correct_predictions_image = np.where(np.expand_dims(predicted_mask.numpy() == truth_mask_resized, axis=-1), image, 1) # This replaces incorrect predictions with black  
-
-        # Display images
-        titles_and_images = [  
-            ('Original Image', image),  
-            ('Ground Truth Mask', truth_mask_resized),  
-            ('Predicted Mask', predicted_mask),  
-            ('Predicted Mask Overlay', overlay_img),
-            ('Correct Predictions Mask', correct_predictions_mask),
-            ('Original image cropped', correct_predictions_image),
-        ]  
+        axs[1].barh(sorted_categories_desc, sorted_pixel_counts_desc, color='lightgreen', height=0.5)  # Adjusted bar width  
+        axs[1].set_xlabel('Number of Pixels', fontsize=12)  # Adjusted font size  
+        axs[1].set_title('Original pixel counts per class', fontsize=14)  # Adjusted font size  
+        axs[1].tick_params(axis='both', which='major', labelsize=10)  # Adjusted tick label size  
+        axs[1].grid(True, linestyle='--', linewidth=0.5)  # Added gridlines  
         
-        # Setting up the figure for 2 rows and 2 columns  
-        plt.figure(figsize=(16, 5))  
-        plt.suptitle(f'Accuracy {accuracy*100:.2f}%', fontsize=16, fontweight='bold', y=1.01)  
+        for index, value in enumerate(sorted_pixel_counts_desc):  
+            axs[1].text(value + 1, index, str(value), va='center', fontsize=10)  # Adjusted text positioning and font size  
         
-        for i, (title, img) in enumerate(titles_and_images, start=1):
-            plt.subplot(2, 3, i)  
-            plt.title(title)
-            plt.imshow(img)
-                
-            plt.axis('off') 
-            
+        plt.tight_layout()  
         plt.show()  
-    
-        print(f"Accuracy: {accuracy*100:.2f}%") 
          
-    def display_mask_and_accuracy(self, image_path, truth_mask_path, predicted_mask):  
-        # Load and preprocess the image  
-        image = self.read_image(image_path)
-        image_to_predict = np.expand_dims(image, axis=0)  # Add batch dimension  
-        
-        # Load and preprocess the truth mask  
-        truth_mask = self.read_mask(truth_mask_path)  # Using the read mask function defined earlier  
-        truth_mask_resized = cv2.resize(truth_mask, (self.cfg["height"], self.cfg["width"]), interpolation=cv2.INTER_NEAREST)  # Resizing to match the model's input  
-
-        # # Predict the mask using the model  
-        # prediction = self.model.predict(image_to_predict)  
-        # predicted_mask = tf.argmax(prediction, axis=-1)[0]  # Remove batch dimension and convert prediction to class labels  
-    
-        # Calculate accuracy  
-        accuracy = np.mean(predicted_mask == truth_mask_resized)  # Assumes truth_mask is already an int32 numpy array of labels  
-        
-        overlay_img = self.read_overlay_pred(image, predicted_mask.numpy())
-        
-        correct_predictions_mask = np.where(predicted_mask == truth_mask_resized, predicted_mask, np.nan)  # Use np.nan for non-correct pixels    
-        
-        correct_predictions_image = np.where(np.expand_dims(predicted_mask.numpy() == truth_mask_resized, axis=-1), image, 1) # This replaces incorrect predictions with black  
-
-        # Display images
-        titles_and_images = [  
-            ('Original Image', image),  
-            ('Ground Truth Mask', truth_mask_resized),  
-            ('Predicted Mask', predicted_mask),  
-            ('Predicted Mask Overlay', overlay_img),
-            ('Correct Predictions Mask', correct_predictions_mask),
-            ('Original image cropped', correct_predictions_image),
-        ]  
-        
-        # Setting up the figure for 2 rows and 2 columns  
-        plt.figure(figsize=(16, 5))  
-        plt.suptitle(f'Accuracy {accuracy*100:.2f}%', fontsize=16, fontweight='bold', y=1.01)  
-        
-        for i, (title, img) in enumerate(titles_and_images, start=1):
-            plt.subplot(2, 3, i)  
-            plt.title(title)
-            plt.imshow(img)
-                
-            plt.axis('off') 
-            
-        plt.show()  
-    
-        print(f"Accuracy: {accuracy*100:.2f}%")  
-        
-        
-    def model_predict_with_display(self, image_path):  
+    def model_inference_with_display(self, image_path):  
         # Load and preprocess the image  
         image = self.read_image(image_path)  
-        image_to_predict = np.expand_dims(image, axis=0)  # Add batch dimension  
+        image_to_predict = np.expand_dims(image, axis=0)
         
-        # Predict the mask using the model  
         prediction = self.model.predict(image_to_predict)  
-        predicted_mask = tf.argmax(prediction, axis=-1)[0]  # Remove batch dimension and convert prediction to class labels  
-        overlay_img = self.read_overlay_pred(image, predicted_mask.numpy())
-        # Display the original image, the predicted mask, and print accuracy  
+        predicted_mask = tf.argmax(prediction, axis=-1)[0] 
+
         plt.figure(figsize=(16, 6))  
         
         plt.subplot(1, 3, 1)  
@@ -457,7 +283,8 @@ class NotebookProcessor:
     
         plt.subplot(1, 3, 3)  
         plt.title('Original + Pred Mask')  
-        plt.imshow(overlay_img, cmap='viridis')  
+        plt.imshow(image)
+        plt.imshow(predicted_mask, cmap='viridis', alpha=0.5)  
         plt.axis('off')  
         
         plt.show()

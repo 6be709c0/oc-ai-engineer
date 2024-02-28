@@ -199,3 +199,61 @@ def display_images_from_tf_dataset(dataset, num_images=5):
         plt.tight_layout()  
         plt.show()  
         break 
+    
+    
+def show_data_generator_images_sample(n):
+    # Parameters  
+    rows = 5  # 40 / 4  
+    images_per_row = 4  
+    total_images = rows * images_per_row  
+    
+    train_generator_iter = iter(n.train_generator)  
+    
+    # Adjust for 4 images and masks per row (8 columns in total)  
+    fig, axs = plt.subplots(rows, images_per_row * 2, figsize=(20, round(1.5 * rows)))    
+    
+    for i in range(total_images):    
+        image, mask = next(train_generator_iter)    
+        axs[i // images_per_row, (i % images_per_row) * 2].imshow(image[0])    
+        axs[i // images_per_row, (i % images_per_row) * 2].axis('off')    
+        axs[i // images_per_row, (i % images_per_row) * 2 + 1].imshow(tf.argmax(mask[0], axis=-1), cmap='viridis')    
+        axs[i // images_per_row, (i % images_per_row) * 2 + 1].axis('off')    
+        
+    plt.tight_layout()    
+    plt.show()    
+    
+def evaluate_with_and_without_aug(n, n_not_aug):
+    test_loss, test_dice_coef, test_iou, test_accuracy = n.model.evaluate(n.test_generator)  
+    test_loss_not_aug, test_dice_coef_not_aug, test_iou_not_aug, test_accuracy_not_aug = n_not_aug.model.evaluate(n_not_aug.test_generator)  
+
+    metrics = ['Loss', 'Dice Coefficient', 'IoU', 'Accuracy']  
+    values = [test_loss, test_dice_coef, test_iou, test_accuracy]  
+    values_not_aug = [test_loss_not_aug, test_dice_coef_not_aug, test_iou_not_aug, test_accuracy_not_aug]  
+    
+    x = np.arange(len(metrics))  
+    
+    plt.figure(figsize=(12, 6))  
+    bars1 = plt.bar(x - 0.2, values, width=0.4, color='skyblue', label='With Augmentation', align='center')  
+    bars2 = plt.bar(x + 0.2, values_not_aug, width=0.4, color='orange', label='Without Augmentation', align='center')  
+    
+    plt.xlabel('Metrics', fontsize=14)  
+    plt.ylabel('Values', fontsize=14)  
+    plt.xticks(x, metrics, fontsize=12)  
+    plt.yticks(fontsize=12)  
+    plt.legend(fontsize=12, loc='upper left', bbox_to_anchor=(1.0, 0.15), fancybox=True, shadow=True)  
+    
+    plt.title('Model Performance Comparison: With vs Without Augmentation', fontsize=16)  
+    
+    # Adding value labels on top of each bar  
+    def add_labels(bars):  
+        for bar in bars:  
+            height = bar.get_height()  
+            plt.text(bar.get_x() + bar.get_width() / 2., height + 0.01, f'{height:.2f}',  # Small y adjustment  
+                    ha='center', va='bottom', fontsize=10)  
+    
+    add_labels(bars1)  
+    add_labels(bars2)  
+    
+    plt.grid(True)  
+    plt.tight_layout()  
+    plt.show()  
