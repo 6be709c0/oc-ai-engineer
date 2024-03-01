@@ -55,10 +55,12 @@ import seaborn as sns  # For making statistical graphics in Python
   
 # Parallel processing  
 from pandarallel import pandarallel  # For parallel data processing  
-  
+pandarallel.initialize()
+
 # Progress bar  
 from tqdm import tqdm  # For adding progress meters  
 from huggingface_hub import cached_download, hf_hub_url
+from hyperopt import hp, STATUS_OK, fmin, tpe, Trials  
 
 # IPython display for notebooks  
 from IPython.display import display, HTML  # For embedding rich web content in IPython notebooks  

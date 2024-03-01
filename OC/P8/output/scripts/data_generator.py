@@ -49,8 +49,8 @@ class DataGenerator(Sequence):
     def __data_generation(self, batch_indexes):  
         # Initialization  
         if self.augmentation:  
-            X = np.empty((self.batch_size * self.cfg["augment_per_image"],self.cfg["height"],self.cfg["width"], 3))  
-            y = np.empty((self.batch_size * self.cfg["augment_per_image"],self.cfg["height"],self.cfg["width"], self.cfg["classes"]), dtype=int)  
+            X = np.empty((self.batch_size * self.cfg["image_per_augment"],self.cfg["height"],self.cfg["width"], 3))  
+            y = np.empty((self.batch_size * self.cfg["image_per_augment"],self.cfg["height"],self.cfg["width"], self.cfg["classes"]), dtype=int)  
         else:
             X = np.empty((self.batch_size, self.cfg["height"],self.cfg["width"], 3))  
             y = np.empty((self.batch_size, self.cfg["height"],self.cfg["width"], self.cfg["classes"]), dtype=int)  
@@ -65,7 +65,7 @@ class DataGenerator(Sequence):
             mask = self.__read_mask(mask_path)  
             
             if self.augmentation:
-                for n in range(self.cfg["augment_per_image"]):
+                for n in range(self.cfg["image_per_augment"]):
                     # Apply augmentations  
                     augmented = self.augmentation(image=image, mask=mask)  
                     aug_image = augmented['image']  

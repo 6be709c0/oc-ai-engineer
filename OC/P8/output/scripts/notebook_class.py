@@ -30,8 +30,6 @@ class NotebookProcessor:
   
     def set_model(self, model):  
         self.model = model
-        
-        model.compile(optimizer="adam", loss=['categorical_crossentropy'], metrics=[dice_coef, iou, "accuracy"])
         model.summary()
 
     def set_dataframes(self):  
@@ -79,34 +77,23 @@ class NotebookProcessor:
         }
         
         # Define an augmentation pipeline  
-        augmentation_pipeline = A.Compose([      
+        self.augmentation_pipeline = A.Compose([      
             A.HorizontalFlip(p=0.5),  
             A.ShiftScaleRotate(shift_limit=0.05, scale_limit=0.05, rotate_limit=15, border_mode=0, p=0.5),
             A.RandomResizedCrop(height=self.cfg["height"], width=self.cfg["width"], scale=(0.8, 1.0), ratio=(0.75, 1.33), p=0.5),
         ])
         
+        self.test_generator = DataGenerator(self.img['test'], self.mask['test'], 3, self.cfg, shuffle=False)  
+        
         if self.cfg["use_augment"]:
-            self.train_generator = DataGenerator(self.img['train'], self.mask['train'], self.cfg['batch_size'], self.cfg, shuffle=True, augmentation=augmentation_pipeline)  
+            self.sample_generator = DataGenerator(self.img['train'], self.mask['train'], 3, self.cfg, shuffle=True, augmentation=self.augmentation_pipeline)  
         else:
-            self.train_generator = DataGenerator(self.img['train'], self.mask['train'], self.cfg['batch_size'], self.cfg, shuffle=True, augmentation=None)  
-            
-        self.val_generator = DataGenerator(self.img['val'], self.mask['val'], self.cfg['batch_size'], self.cfg, shuffle=False)  
-        self.test_generator = DataGenerator(self.img['test'], self.mask['test'], self.cfg['batch_size'], self.cfg, shuffle=False)  
+            self.sample_generator = DataGenerator(self.img['train'], self.mask['train'], 3, self.cfg, shuffle=True, augmentation=None)  
         
     def model_save(self, path):
         self.model.save(path)
         
-    def model_fit(self):
-        
-        if(self.cfg["use_saved_model_path"]):
-            print("Skipping because of use_saved_model_path set in config")
-            print(f"Loading model from config {self.cfg['use_saved_model_path']}")
-            
-            model = tf.keras.models.load_model(self.cfg["use_saved_model_path"]) 
-            self.set_model(model)
-            
-            return
-    
+    def objective(self, params):
         early_stopping = tf.keras.callbacks.EarlyStopping(  
             monitor='val_loss',   
             min_delta=0.001,   
@@ -114,30 +101,43 @@ class NotebookProcessor:
             verbose=1,   
             restore_best_weights=True  
         )
+        optimizer = tf.keras.optimizers.legacy.Adam(learning_rate=params['learning_rate'])  
+        
+        self.model.compile(optimizer=optimizer, loss=['categorical_crossentropy'], metrics=[dice_coef, iou, "accuracy"])
+        
+        cfg = {
+            **self.cfg,
+            "image_per_augment": params["image_per_augment"]
+        }    
 
+        train_generator = DataGenerator(self.img['train'], self.mask['train'], params["batch_size"], cfg, shuffle=True, augmentation=self.augmentation_pipeline)  
+        val_generator = DataGenerator(self.img['val'], self.mask['val'], params["batch_size"], cfg, shuffle=False)  
+        
         if(self.cfg["mlwflow_tracking_uri"]):
             mlflow.set_experiment(self.cfg["mlwflow_experiment_title"])  
             with mlflow.start_run():
                 
-                mlflow.log_params(self.cfg)    
+                mlflow.log_params({
+                    **self.cfg,
+                    **params
+                })    
                 
                 history = self.model.fit(  
-                    self.train_generator,  
-                    validation_data=self.val_generator,  
-                    epochs=self.cfg["epoch"],  
+                    train_generator,  
+                    validation_data=val_generator,  
+                    epochs=params["epochs"],  
                     callbacks=[early_stopping]  # Assuming early_stopping callback is defined  
                 ) 
                 
                 mlflow.log_metric("best_loss", min(history.history['loss']))
                 mlflow.log_metric("best_dice_coef", min(history.history['dice_coef']))
-                mlflow.log_metric("best_iou", min(history.history['dice_iou']))
+                mlflow.log_metric("best_iou", min(history.history['iou']))
                 mlflow.log_metric("best_accuracy", max(history.history['accuracy']))
-                
                 
                 mlflow.log_metric("best_val_accuracy", max(history.history['val_accuracy']))
                 mlflow.log_metric("best_val_loss", min(history.history['val_loss']))          
                 mlflow.log_metric("best_val_dice_coef", min(history.history['val_dice_coef']))
-                mlflow.log_metric("best_val_iou", min(history.history['val_dice_iou']))
+                mlflow.log_metric("best_val_iou", min(history.history['val_iou']))
                 
                 self.model.save("model.keras")
                 mlflow.log_artifact('model.keras')
@@ -147,11 +147,49 @@ class NotebookProcessor:
             history = self.model.fit(  
                 self.train_generator,  
                 validation_data=self.val_generator,  
-                epochs=self.cfg["epoch"],  
+                epochs=params["epochs"],  
                 callbacks=[early_stopping]  # Assuming early_stopping callback is defined  
             ) 
             self.model_fit_history = history
+            
+        return {'loss': -max(history.history['val_accuracy']), 'status': STATUS_OK}  
+ 
+    def model_fit(self, space=None):
+        
+        if(self.cfg["use_saved_model_path"]):
+            print("Skipping because of use_saved_model_path set in config")
+            print(f"Loading model from config {self.cfg['use_saved_model_path']}")
+            
+            model = tf.keras.models.load_model(self.cfg["use_saved_model_path"]) 
+            self.set_model(model)
+            return
+        
+        if space == None:
+            space = {
+                'image_per_augment': hp.choice('image_per_augment', [1]),
+                'batch_size': hp.choice('batch_size', [3]),
+                'epochs': hp.choice('epochs', [12]),
+                'learning_rate': hp.choice('learning_rate', [1e-3]),  
+            }
+            # space = {
+            #     'image_per_augment': hp.choice('image_per_augment', [1, 2, 3, 4, 5, 6, 7, 8]),
+            #     'batch_size': hp.choice('batch_size', [3, 4, 8, 16]),
+            #     'epochs': hp.choice('epochs', [4, 8, 12, 24]),
+            #     'learning_rate': hp.uniform('learning_rate', 0.0001, 0.001),  
+            # }
+        
+        trials = Trials()
+        fmin(  
+            fn=lambda params: self.objective(params),  
+            space=space,  
+            algo=tpe.suggest,  
+            max_evals=self.cfg["max_evals"],
+            trials=trials  
+        )
+        
         print("\nModel trained!\n")
+
+        
         
     def read_image(self, x):  
         x = cv2.imread(x, cv2.IMREAD_COLOR)  
@@ -211,7 +249,13 @@ class NotebookProcessor:
         correct_predictions_image = np.where((predicted_mask_np[:, :, None] == ground_truth_mask[:, :, None]), image, 1)  # Replacing incorrect predictions with black  
         correct_predictions_mask = np.where(predicted_mask == ground_truth_mask, predicted_mask, np.nan)  # Use np.nan for non-correct pixels    
         accuracy = np.mean(predicted_mask_np == ground_truth_mask)  
-    
+        
+        # IoU Calculation  
+        ground_truth_mask_one_hot = tf.one_hot(ground_truth_mask, depth=prediction.shape[-1])
+        predicted_mask_one_hot = tf.one_hot(predicted_mask, depth=prediction.shape[-1])
+  
+        iou_score = iou(ground_truth_mask_one_hot, predicted_mask_one_hot)  
+        
         # Calculating per-class accuracy  
         unique_classes_in_truth = np.unique(ground_truth_mask)  # Find unique classes in the ground truth mask  
         conf_matrix = confusion_matrix(ground_truth_mask.flatten(), predicted_mask_np.flatten(), labels=unique_classes_in_truth)  
@@ -234,8 +278,7 @@ class NotebookProcessor:
             ground_truth_mask, 
             predicted_mask_np,
             correct_predictions_mask,
-            correct_predictions_image,
-            accuracy
+            correct_predictions_image
         )
         
         # Plotting  
