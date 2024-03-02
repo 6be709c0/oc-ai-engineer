@@ -250,12 +250,6 @@ class NotebookProcessor:
         correct_predictions_mask = np.where(predicted_mask == ground_truth_mask, predicted_mask, np.nan)  # Use np.nan for non-correct pixels    
         accuracy = np.mean(predicted_mask_np == ground_truth_mask)  
         
-        # IoU Calculation  
-        ground_truth_mask_one_hot = tf.one_hot(ground_truth_mask, depth=prediction.shape[-1])
-        predicted_mask_one_hot = tf.one_hot(predicted_mask, depth=prediction.shape[-1])
-  
-        iou_score = iou(ground_truth_mask_one_hot, predicted_mask_one_hot)  
-        
         # Calculating per-class accuracy  
         unique_classes_in_truth = np.unique(ground_truth_mask)  # Find unique classes in the ground truth mask  
         conf_matrix = confusion_matrix(ground_truth_mask.flatten(), predicted_mask_np.flatten(), labels=unique_classes_in_truth)  
