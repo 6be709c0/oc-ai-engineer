@@ -22,4 +22,3 @@ datasets
 evaluate
 mlflow
 hyperopt
-cv2

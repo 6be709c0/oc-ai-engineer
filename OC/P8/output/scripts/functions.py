@@ -1,14 +1,26 @@
 from librairies import *
 
 def get_file_info(json_path):
+    """   
+    Generates file paths related to the original image from a given JSON path, adjusting for directory and naming conventions.  
+      
+    Args:  
+    json_path: Path to the JSON file containing polygons information.  
+      
+    Returns:  
+    A list containing paths to the original image, color image, instance IDs image, label IDs image, and the polygons JSON file.  
+    """
+    # Remove specified suffix to obtain the prefix for constructing file paths  
     file_path_prefix = json_path.replace("_polygons.json", "")
     
+    # Construct the original image path by adjusting the directory and file naming convention  
     original_img_path = (
         file_path_prefix
             .replace("gtFine/","leftImg8bit/")
             .replace("_gtFine", "_leftImg8bit.png")
     )
-    
+
+    # Construct other related file paths using the prefix  
     color_img_path = file_path_prefix + "_color.png"
     instance_ids_img_path = file_path_prefix + "_instanceIds.png"
     label_ids_img_path = file_path_prefix + "_labelIds.png"
@@ -16,8 +28,11 @@ def get_file_info(json_path):
     
     return [original_img_path, color_img_path, instance_ids_img_path, label_ids_img_path, polygons_json_path]
 
-# Corrected Category Mapping  
-category_mapping = {    
+# Dictionary for mapping category names to their numeric IDs  
+category_mapping = {
+    # Mapping of categories to ID values follows domain-specific knowledge, 
+    # consolidating similar categories under single numeric IDs  
+   
     # void    
     "ground": 0, "dynamic": 0, "static": 0, "out of roi": 0, "ego vehicle": 0,
     # flat    
@@ -39,7 +54,15 @@ category_mapping = {
 
 
 def polygon_to_mask_img(json_path):
-    
+    """  
+    Create a mask image from the polygons described in a JSON file.  
+      
+    Args:  
+    json_path: Path to the JSON file containing polygons and category labels for those polygons.  
+      
+    Returns:  
+    A NumPy array representing the mask image, where each pixel value corresponds to the category of the object it belongs to.  
+    """
     # Load the JSON File
     json_data = json.load(open(json_path))
     
@@ -59,7 +82,13 @@ def polygon_to_mask_img(json_path):
         
     return mask
 
-def display_loss_accuracy_dice_iou(history):    
+def display_loss_accuracy_dice_iou(history): 
+    """  
+    Display graphs for training/validation loss, accuracy, Dice coefficient, and IoU over epochs.  
+      
+    Args:  
+    history: A History object resulting from a fit operation on a Keras model. Contains training history info.  
+    """
     # Extracting values from history  
     loss = history.history['loss']    
     val_loss = history.history['val_loss']    
@@ -116,6 +145,16 @@ def display_loss_accuracy_dice_iou(history):
     plt.show()  
     
 def show_grid_prediction(image, gt_mask, pred_mask, correct_pred_mask, cropped_image):
+    """   
+    Display a grid of images to compare original image, masks, and cropped images.  
+      
+    Parameters:  
+    - image: The original image.  
+    - gt_mask: The ground truth mask for the image.  
+    - pred_mask: The predicted mask for the image.  
+    - correct_pred_mask: Mask of correct predictions.  
+    - cropped_image: A cropped version of the original image.  
+    """  
     fig, ax = plt.subplots(2, 3, figsize=(18, 6))  
 
     # Original image
@@ -153,6 +192,13 @@ def show_grid_prediction(image, gt_mask, pred_mask, correct_pred_mask, cropped_i
     plt.show()
     
 def show_prediction(image, pred_mask):
+    """   
+    Display the original image, predicted mask, and an overlay of the predicted mask on the image.  
+      
+    Parameters:  
+    - image: The original image.  
+    - pred_mask: The predicted mask for the image.  
+    """  
     fig, ax = plt.subplots(1, 3, figsize=(18, 6))  
       
     # Original image
@@ -175,17 +221,46 @@ def show_prediction(image, pred_mask):
     plt.show()
     
 def dice_coef(y_true, y_pred, smooth=1e-6):  
+    """   
+    Calculate the Dice Coefficient for measuring the similarity between two samples.  
+      
+    Parameters:  
+    - y_true: The ground truth labels.  
+    - y_pred: The predicted labels.  
+    - smooth: A smoothing factor to avoid division by zero.  
+      
+    Returns:  
+    - Dice Coefficient as a float.  
+    """ 
     y_true_f = K.flatten(y_true)  
     y_pred_f = K.flatten(y_pred)  
     intersection = K.sum(y_true_f * y_pred_f)  
     return (2. * intersection + smooth) / (K.sum(y_true_f) + K.sum(y_pred_f) + smooth)  
   
 def iou(y_true, y_pred, smooth=1e-6):  
+    """  
+    Calculate the Intersection over Union (IoU) between the predicted and ground truth masks.  
+      
+    Parameters:  
+    - y_true: The ground truth masks.  
+    - y_pred: The predicted masks.  
+    - smooth: A smoothing factor to avoid division by zero.  
+      
+    Returns:  
+    - IoU score as a float.  
+    """ 
     intersection = K.sum(K.abs(y_true * y_pred), axis=[1,2,3])  
     union = K.sum(y_true,[1,2,3]) + K.sum(y_pred,[1,2,3]) - intersection  
     return K.mean((intersection + smooth) / (union + smooth), axis=0)  
     
 def display_images_from_tf_dataset(dataset, num_images=5):  
+    """  
+    Display a set of images and their corresponding masks from a TensorFlow dataset.  
+      
+    Parameters:  
+    - dataset: TensorFlow dataset object containing images and masks.  
+    - num_images: Number of images to display.  
+    """ 
     # Make sure our dataset iterates only once through a portion of the data by using take  
     for images, masks in dataset.take(1):  # Taking 1 batch from the dataset  
         plt.figure(figsize=(10, 2 * num_images))  # Adjust figure size as needed  
@@ -205,6 +280,12 @@ def display_images_from_tf_dataset(dataset, num_images=5):
     
     
 def show_data_generator_images_sample(n):
+    """  
+    Display images and masks generated by a data generator.  
+      
+    Parameters:  
+    - n: An object containing a sample generator for images and masks.  
+    """
     # Parameters  
     rows = 5  # 40 / 4  
     images_per_row = 4  
@@ -226,6 +307,13 @@ def show_data_generator_images_sample(n):
     plt.show()    
     
 def evaluate_with_and_without_aug(n, n_not_aug=None):
+    """  
+    Evaluate the performance of models with and without data augmentation and plot their metrics.  
+      
+    Parameters:  
+    - n: An object containing the model and test generator with augmentation.  
+    - n_not_aug: An object containing the model and test generator without augmentation (optional).  
+    """ 
     test_loss, test_dice_coef, test_iou, test_accuracy = n.model.evaluate(n.test_generator)
     if n_not_aug:
         test_loss_not_aug, test_dice_coef_not_aug, test_iou_not_aug, test_accuracy_not_aug = n_not_aug.model.evaluate(n_not_aug.test_generator)  
@@ -252,6 +340,12 @@ def evaluate_with_and_without_aug(n, n_not_aug=None):
     
     # Adding value labels on top of each bar  
     def add_labels(bars):  
+        """
+        Add value labels above each bar in a bar chart.  
+          
+        Parameters:  
+        - bars: A list of bars in the bar chart.  
+        """
         for bar in bars:  
             height = bar.get_height()  
             plt.text(bar.get_x() + bar.get_width() / 2., height + 0.01, f'{height:.2f}',  # Small y adjustment  

@@ -4,6 +4,12 @@ from functions import *
 from data_generator import DataGenerator
 
 class NotebookProcessor:
+    """  
+    A class responsible for processing notebooks for image segmentation tasks.  
+    It encompasses setup, data preprocessing, model configuration, training, prediction, and evaluation.  
+    """ 
+    
+    # Dictionary classifying pixel labels into broader categories.
     categories = {  
         'void': [0, 1, 2, 3, 4, 5, 6],  
         'flat': [7, 8, 9, 10],  
@@ -16,6 +22,12 @@ class NotebookProcessor:
     }  
     
     def __init__(self, config):  
+        """  
+        Initializes the NotebookProcessor with a given configuration.  
+          
+        Args:  
+        config (dict): A dictionary containing key configuration settings for processing.  
+        """ 
         self.cfg = config  
         self.prepare_notebook()
         
@@ -25,27 +37,47 @@ class NotebookProcessor:
             mlflow.set_tracking_uri(uri=self.cfg["mlwflow_tracking_uri"])
         
     def print_config(self):  
+        """  
+        Displays the current configuration settings in a formatted HTML manner.  
+        """
         display(HTML('<h1 style="padding:0;margin:0;"><b>CONFIG USED</b></h1>'))    
         print(json.dumps(self.cfg, indent=4), "\n")  
   
     def set_model(self, model):  
+        """  
+        Assigns a model to the processor and prints its summary.  
+          
+        Args:  
+        model (Keras Model): The machine learning model to be used in processing.  
+        """ 
         self.model = model
         model.summary()
 
     def set_dataframes(self):  
+        """  
+        Prepares training, testing, and validation dataframes from JSON files located in specified data paths.  
+        Optionally samples subsets from these datasets if specified in the configuration.  
+        """ 
+        
+        # Globbing JSON paths for different data splits
         json_paths_train = glob(f'{self.cfg["data_path"]}/train/**/*.json')
         json_paths_test = glob(f'{self.cfg["data_path"]}/test/**/*.json')
         json_paths_val = glob(f'{self.cfg["data_path"]}/val/**/*.json')
 
+        # Extracting file info from JSON paths  
         data_train = [get_file_info(path) for path in json_paths_train]
         data_test = [get_file_info(path) for path in json_paths_test]
         data_val = [get_file_info(path) for path in json_paths_val]
-
+        
+        # Specifying columns for the dataframe  
         columns = ["original_img_path", "color_img_path", "instance_ids_img_path", "label_ids_img_path", "polygons_json_path"]
+        
+        # Creating dataframes
         df_train = pd.DataFrame(data_train, columns=columns)
         df_test = pd.DataFrame(data_test, columns=columns)
         df_val = pd.DataFrame(data_val, columns=columns)
         
+        # Sampling datasets if required  
         if self.cfg["train_sample_nb"] > 0:
             print(f"\n- Sampling the training dataset from {df_train.shape[0]} to {self.cfg['train_sample_nb']}.")
             df_train = df_train.sample(n=self.cfg["train_sample_nb"], random_state=42).reset_index(drop=True)
@@ -58,18 +90,21 @@ class NotebookProcessor:
         else:
             print("- Using the full validation dataset")
         
+        # Storing dataframes for each split in a dictionary for easy access  
         self.dfs = {
             "train": df_train,
             "test": df_test,
             "val": df_val,
         }
         
+        # Storing image paths in a separate dictionary  
         self.img = {
             "train": df_train["original_img_path"].tolist(),
             "test": df_test["original_img_path"].tolist(),
             "val": df_val["original_img_path"].tolist(),
         }
         
+        # Storing mask paths in a separate dictionary  
         self.mask = {
             "train": df_train["label_ids_img_path"].tolist(),
             "test": df_test["label_ids_img_path"].tolist(),
@@ -83,6 +118,7 @@ class NotebookProcessor:
             A.RandomResizedCrop(height=self.cfg["height"], width=self.cfg["width"], scale=(0.8, 1.0), ratio=(0.75, 1.33), p=0.5),
         ])
         
+        # Creating data generators for test and potentially augmented sample data  
         self.test_generator = DataGenerator(self.img['test'], self.mask['test'], 3, self.cfg, shuffle=False)  
         
         if self.cfg["use_augment"]:
@@ -91,9 +127,22 @@ class NotebookProcessor:
             self.sample_generator = DataGenerator(self.img['train'], self.mask['train'], 3, self.cfg, shuffle=True, augmentation=None)  
         
     def model_save(self, path):
+        """  
+        Saves the current model to the specified path.  
+          
+        Args:  
+        path (str): The file path where the model should be saved.  
+        """
         self.model.save(path)
         
     def objective(self, params):
+        """Defines the objective function for hyperparameter tuning.  
+      
+        This function compiles the model with given parameters, trains the model using training and validation  
+        data generators, logs training metrics using MLFlow, and calculates the loss based on validation accuracy.  
+        """
+        
+        # Define early stopping criteria to avoid overfitting  
         early_stopping = tf.keras.callbacks.EarlyStopping(  
             monitor='val_loss',   
             min_delta=0.001,   
@@ -101,18 +150,24 @@ class NotebookProcessor:
             verbose=1,   
             restore_best_weights=True  
         )
+        
+        # Initialize optimizer with a learning rate from the hyperparameter search space  
         optimizer = tf.keras.optimizers.legacy.Adam(learning_rate=params['learning_rate'])  
         
+        # Compile the model with the selected optimizer, loss function, and metrics  
         self.model.compile(optimizer=optimizer, loss=['categorical_crossentropy'], metrics=[dice_coef, iou, "accuracy"])
         
+        # Update configuration dictionary with image augmentation parameter from the search space  
         cfg = {
             **self.cfg,
             "image_per_augment": params["image_per_augment"]
         }    
 
+        # Initialize data generators for training and validation datasets  
         train_generator = DataGenerator(self.img['train'], self.mask['train'], params["batch_size"], cfg, shuffle=True, augmentation=self.augmentation_pipeline)  
         val_generator = DataGenerator(self.img['val'], self.mask['val'], params["batch_size"], cfg, shuffle=False)  
         
+        # Check if MLflow tracking is enabled in configuration  
         if(self.cfg["mlwflow_tracking_uri"]):
             mlflow.set_experiment(self.cfg["mlwflow_experiment_title"])  
             with mlflow.start_run():
@@ -144,6 +199,7 @@ class NotebookProcessor:
                 
                 self.model_fit_history = history
         else:
+            # If MLflow tracking is not enabled, training proceeds without logging  
             history = self.model.fit(  
                 self.train_generator,  
                 validation_data=self.val_generator,  
@@ -151,19 +207,24 @@ class NotebookProcessor:
                 callbacks=[early_stopping]  # Assuming early_stopping callback is defined  
             ) 
             self.model_fit_history = history
-            
+
+        # Return the negative max validation accuracy as loss (for optimization) and the status  
         return {'loss': -max(history.history['val_accuracy']), 'status': STATUS_OK}  
  
     def model_fit(self, space=None):
-        
+        """  
+        Prepares the hyperparameter search space and starts the hyperparameter optimization using the objective function.  
+        """
         if(self.cfg["use_saved_model_path"]):
             print("Skipping because of use_saved_model_path set in config")
             print(f"Loading model from config {self.cfg['use_saved_model_path']}")
             
+            # Load a pre-trained model if specified in the configuration  
             model = tf.keras.models.load_model(self.cfg["use_saved_model_path"]) 
             self.set_model(model)
             return
         
+        # Initialize default search space if not provided  
         if space == None:
             space = {
                 'image_per_augment': hp.choice('image_per_augment', [1]),
@@ -178,7 +239,9 @@ class NotebookProcessor:
             #     'learning_rate': hp.uniform('learning_rate', 0.0001, 0.001),  
             # }
         
+        # Initialize a Trials object to store info about each iteration  
         trials = Trials()
+        # Start hyperparameter optimization  
         fmin(  
             fn=lambda params: self.objective(params),  
             space=space,  
@@ -192,6 +255,15 @@ class NotebookProcessor:
         
         
     def read_image(self, x):  
+        """  
+        Reads and preprocesses an image.  
+  
+        Parameters:  
+        - x: filepath to the image.  
+  
+        Returns:  
+        The processed image.  
+        """
         x = cv2.imread(x, cv2.IMREAD_COLOR)  
         x = cv2.resize(x, (self.cfg["width"], self.cfg["height"]))  
         x = x/255.0  
@@ -199,7 +271,16 @@ class NotebookProcessor:
         x = cv2.cvtColor(x, cv2.COLOR_BGR2RGB)
         return x  
     
-    def read_mask(self, x):  
+    def read_mask(self, x):
+        """  
+        Reads and preprocesses a mask image, including resizing and categorization.  
+  
+        Parameters:  
+        - x: filepath to the mask image.  
+  
+        Returns:  
+        The processed mask.  
+        """  
         original_mask = cv2.imread(x, cv2.IMREAD_GRAYSCALE)   
         mask = np.zeros_like(original_mask, dtype=np.int32)  
     

@@ -1,9 +1,23 @@
 from librairies import *
 
 def download_file(url, path):  
+    """  
+    Download a file from a given URL to a specified local path.  
+      
+    Args:  
+        url (str): URL of the file to download.  
+        path (str): Local path where the file will be saved.  
+    """
+    # Use subprocess to run 'curl' command for downloading files
     subprocess.run(["curl", "-L", url, "-o", path], check=True)  
   
-def download_dataset(config):  
+def download_dataset(config):
+    """  
+    Download the necessary datasets if they don't already exist in the local storage.  
+      
+    Args:  
+        config (dict): Configuration dictionary containing paths for datasets.  
+    """
     gtFine_path = config["gtFine_path"]
     leftImg8bit_path = config["leftImg8bit_path"]
     # Create the 'data' directory if it doesn't exist  
@@ -24,23 +38,37 @@ def download_dataset(config):
     else:  
         print(f"Dataset already exist, skip downloading: {leftImg8bit_path}")  
   
-def unzip_dataset(config):  
+def unzip_dataset(config):
+    """  
+    Unzip the downloaded datasets into the designated directory.  
+      
+    Args:  
+        config (dict): Configuration dictionary containing paths for datasets.  
+    """
     gtFine_path = config["gtFine_path"]
     leftImg8bit_path = config["leftImg8bit_path"]
     
-    # Unzip gtFine  
+    # Unzip gtFine dataset if the zip file exists  
     if os.path.isfile(gtFine_path):  
         subprocess.run(["unzip", "-q", "-n", gtFine_path, "-d", "data/"], check=True)  
-        subprocess.run(["rm", gtFine_path], check=False)  # check=False because deletion is not critical  
+        subprocess.run(["rm", gtFine_path], check=False)
   
-    # Unzip leftImg8bit  
+    # Unzip leftImg8bit dataset if the zip file exists 
     if os.path.isfile(leftImg8bit_path):  
         subprocess.run(["unzip", "-q", "-n", leftImg8bit_path, "-d", "data/"], check=True)  
-        subprocess.run(["rm", leftImg8bit_path], check=False)  # check=False because deletion is not critical
+        subprocess.run(["rm", leftImg8bit_path], check=False)
           
-def move_val_test(config):  
+def move_val_test(config):
+    """  
+    Organize dataset directories by moving validation data to test directories as necessary.  
+      
+    Args:  
+        config (dict): Configuration dictionary containing paths for datasets.  
+    """
+    
     data_path = config["data_path"]
     
+    # Define directories to delete under gtFine and leftImg8bit 
     data_paths_to_delete_gtFine = [  
         os.path.join(data_path, "test/berlin"),  
         os.path.join(data_path, "test/bielefeld"),  
@@ -58,7 +86,8 @@ def move_val_test(config):
         os.path.join(data_path, "..", "leftImg8bit", "test/mainz"),  
         os.path.join(data_path, "..", "leftImg8bit", "test/munich")  
     ]  
-      
+    
+    # Define directories to move from 'val' to 'test' 
     data_paths_to_move_gtFine = [  
         os.path.join(data_path, "val/munster"),  
     ]  
