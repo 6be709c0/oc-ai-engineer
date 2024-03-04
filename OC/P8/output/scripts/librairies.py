@@ -41,6 +41,7 @@ from albumentations import HorizontalFlip, VerticalFlip, Rotate
   
 # Visualization libraries  
 import matplotlib.pyplot as plt  
+import matplotlib as mpl  
 import seaborn as sns  
   
 # Parallel processing and progress bar utilities  

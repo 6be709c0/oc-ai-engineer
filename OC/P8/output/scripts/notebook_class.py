@@ -220,7 +220,7 @@ class NotebookProcessor:
             print(f"Loading model from config {self.cfg['use_saved_model_path']}")
             
             # Load a pre-trained model if specified in the configuration  
-            model = tf.keras.models.load_model(self.cfg["use_saved_model_path"]) 
+            model = tf.keras.models.load_model(self.cfg["use_saved_model_path"], custom_objects={'dice_coef': dice_coef, 'iou': iou})
             self.set_model(model)
             return
         
