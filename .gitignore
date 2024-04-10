@@ -26,3 +26,5 @@ results/
 data/
 roulette/
 *.tar
+OC/P9/v1-cnn-encoder/dataset
+OC/P9/v1-cnn-encoder/output
