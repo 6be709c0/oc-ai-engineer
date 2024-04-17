@@ -84,7 +84,6 @@ aws ec2 describe-instances \
 
 ## Prepare OS
 ```sh
-
 # Now that you are logged in in SSH, you can run the below commands
 
 # Prepare conda
@@ -101,21 +100,22 @@ print(torch.cuda.is_available())
 
 python3 test.py
 mkdir workspace
-# Install jupyterlab
-# Jupyter notebook work in background but it's not intended to work well with no background usage.
-# conda activate /opt/conda/envs/pytorch
-# # Jupyter Lab: https://anaconda.org/conda-forge/jupyterlab/files
-# # Notebook: https://anaconda.org/conda-forge/notebook/files
-# conda install -c conda-forge jupyterlab=4.0.7 notebook=7.1.2
+```
 
-# Now quit the instance and copy the different files:
+Now quit the instance and copy the different files from your local machine:
+```sh
 scp EfficientADNew.zip ubuntu@54.160.236.15:/home/ubuntu/workspace
 
 # Relogin
 ssh ubuntu@54.160.236.15
 
 cd workspace
+
+git clone https://github.com/6be709c0/oc-ai-engineer.git
 unzip EfficientADNew.zip
+
+# The workspace is now ready
+# Let's run the efficientAD cookie dataset
 cd EfficientADNew
 
 conda create -p venv python=3.9 -y

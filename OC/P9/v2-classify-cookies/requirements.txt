@@ -1,0 +1,21 @@
+ipykernel
+# numpy
+# pandas
+matplotlib
+tensorflow==2.15.0
+opencv-python
+torch
+torchvision
+pyaudio
+six
+
+# scikit-learn
+# torchvision 
+# torchaudio
+tensorflow==2.15.0
+numpy
+Pillow
+scikit-learn
+# tensorflow-macos
+# tensorflow-metal
+edge_impulse_linux
