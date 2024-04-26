@@ -1,7 +1,7 @@
-#!/usr/bin/python
-# -*- coding: utf-8 -*-
+# Copied from Source https://github.com/nelson1425/EfficientAD/blob/main/common.py
 from torch import nn
 from torchvision.datasets import ImageFolder
+from torch.utils.data import DataLoader, Dataset  
 
 def get_autoencoder(out_channels=384):
     return nn.Sequential(
@@ -99,22 +99,3 @@ def get_pdn_medium(out_channels=384, padding=False):
         nn.Conv2d(in_channels=out_channels, out_channels=out_channels,
                   kernel_size=1)
     )
-
-class ImageFolderWithoutTarget(ImageFolder):
-    def __getitem__(self, index):
-        sample, target = super().__getitem__(index)
-        return sample
-
-class ImageFolderWithPath(ImageFolder):
-    def __getitem__(self, index):
-        path, target = self.samples[index]
-        sample, target = super().__getitem__(index)
-        return sample, target, path
-
-def InfiniteDataloader(loader):
-    iterator = iter(loader)
-    while True:
-        try:
-            yield next(iterator)
-        except StopIteration:
-            iterator = iter(loader)

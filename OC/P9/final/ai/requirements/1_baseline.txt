@@ -13,3 +13,4 @@ scikit-learn
 edge_impulse_linux
 edgeimpulse
 python-dotenv
+pandas
