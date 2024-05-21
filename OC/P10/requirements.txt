@@ -1,0 +1,13 @@
+pandas
+ipykernel
+recommenders
+scikit-learn
+pyspark
+tensorflow
+keras
+Cython
+numpy
+scipy
+progressbar
+tensorflow_datasets
+tensorflow_recommenders
