@@ -11,3 +11,4 @@ scipy
 progressbar
 tensorflow_datasets
 tensorflow_recommenders
+LightGCN-pytorch

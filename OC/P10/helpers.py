@@ -42,6 +42,10 @@ from sklearn.metrics import roc_auc_score
 
 from tensorflow.keras import layers, models, regularizers
 from sklearn.model_selection import train_test_split
+from tensorflow.keras.layers import Embedding, Input, Lambda
+
+from tensorflow.keras.regularizers import l2
+from sklearn.metrics import roc_auc_score, ndcg_score
 
 def load_dataset():
     # Load datasets
