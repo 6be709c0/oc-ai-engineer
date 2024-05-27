@@ -2,14 +2,12 @@ import pickle
 import pandas as pd
 import os
 from concurrent.futures import ProcessPoolExecutor
-from read_csv_module import read_csv
 
 import progressbar
 import numpy as np
 from scipy.sparse import csr_matrix
 from sklearn.decomposition import PCA
 from surprise import Dataset, Reader, SVD, accuracy
-from surprise.model_selection import train_test_split as train_test_split_surprise
 
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.model_selection import train_test_split as train_test_split_sklearn
@@ -46,6 +44,13 @@ from tensorflow.keras.layers import Embedding, Input, Lambda
 
 from tensorflow.keras.regularizers import l2
 from sklearn.metrics import roc_auc_score, ndcg_score
+
+import pandas as pd
+
+# Read all csv from clicks folder    
+def read_csv(file_path):
+    return pd.read_csv(file_path)
+
 
 def load_dataset():
     # Load datasets

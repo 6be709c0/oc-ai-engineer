@@ -2,8 +2,7 @@ pandas
 ipykernel
 recommenders
 scikit-learn
-pyspark
-tensorflow
+tensorflow==2.13.0
 keras
 Cython
 numpy
@@ -11,4 +10,3 @@ scipy
 progressbar
 tensorflow_datasets
 tensorflow_recommenders
-LightGCN-pytorch
