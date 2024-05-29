@@ -48,9 +48,17 @@ exit
 scp data.zip ubuntu@$PUBLIC_IP:/home/ubuntu/test/
 scp content-based-pca.ipynb ubuntu@$PUBLIC_IP:/home/ubuntu/test/
 scp collaborative-filtering.ipynb ubuntu@$PUBLIC_IP:/home/ubuntu/test/
+scp sar_deep_dive.ipynb ubuntu@$PUBLIC_IP:/home/ubuntu/test/
+scp sar_deep_dive-base.ipynb ubuntu@$PUBLIC_IP:/home/ubuntu/test/
 scp helpers.py ubuntu@$PUBLIC_IP:/home/ubuntu/test/
 scp requirements.txt ubuntu@$PUBLIC_IP:/home/ubuntu/test/
 scp input/lightgcn.yaml ubuntu@$PUBLIC_IP:/home/ubuntu/test/input
+
+scp ubuntu@$PUBLIC_IP:/home/ubuntu/test/input/content-based-reduced.h5 .
+scp ubuntu@$PUBLIC_IP:/home/ubuntu/test/input/user_profiles_df_test-reduced.pkl .
+scp ubuntu@$PUBLIC_IP:/home/ubuntu/test/input/user_profiles_df_all-reduced.pkl .
+scp ubuntu@$PUBLIC_IP:/home/ubuntu/test/input/article_embeddings_df-reduced.pkl .
+scp ubuntu@$PUBLIC_IP:/home/ubuntu/test/content-based-pca.ipynb .
 
 # ---
 ssh ubuntu@$PUBLIC_IP

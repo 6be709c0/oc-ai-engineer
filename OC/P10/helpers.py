@@ -2,6 +2,7 @@ import pickle
 import pandas as pd
 import os
 from concurrent.futures import ProcessPoolExecutor
+from multiprocessing import Pool
 
 import progressbar
 import numpy as np
@@ -156,3 +157,57 @@ def recall_at_k(y_true, y_pred, k):
     top_k_hits = y_true[top_k_indices]
     return np.sum(top_k_hits) / np.sum(y_true)
 
+
+
+from concurrent.futures import ProcessPoolExecutor, as_completed
+
+# Function to process a single user profile
+def process_user_profile(user, embeddings_dict, articles_df):
+    X_user = []
+    y_user = []
+    
+    user_embedding = user['user_embedding']
+    clicked_articles = user['click_article_id']
+    
+    for article_id in clicked_articles:
+        if article_id in embeddings_dict:
+            article_embedding = embeddings_dict[article_id]
+            combined_features = np.concatenate((user_embedding, article_embedding))
+            X_user.append(combined_features)
+            y_user.append(1)  # Positive sample
+    
+    # Add some negative samples for training
+    negative_samples = articles_df[~articles_df['article_id'].isin(clicked_articles)]['article_id'].sample(n=len(clicked_articles))
+    
+    for article_id in negative_samples:
+        if article_id in embeddings_dict:
+            article_embedding = embeddings_dict[article_id]
+            combined_features = np.concatenate((user_embedding, article_embedding))
+            X_user.append(combined_features)
+            y_user.append(0)  # Negative sample
+    
+    return X_user, y_user
+
+# Main function to prepare data using multi-CPU processing
+def prepare_data(user_profiles_df_train, articles_df, articles_embeddings_df, max_users=500):
+    embeddings_dict = articles_embeddings_df.T.to_dict('list')
+    
+    X = []
+    y = []
+    
+    with ProcessPoolExecutor() as executor:
+        futures = []
+        for i, user in tqdm(user_profiles_df_train.iterrows(), total=min(len(user_profiles_df_train), max_users)):
+            # if i >= max_users:
+            #     break
+            futures.append(executor.submit(process_user_profile, user, embeddings_dict, articles_df))
+        
+        for future in tqdm(as_completed(futures), total=len(futures)):
+            X_user, y_user = future.result()
+            X.extend(X_user)
+            y.extend(y_user)
+    
+    X = np.array(X)
+    y = np.array(y)
+    
+    return X, y
