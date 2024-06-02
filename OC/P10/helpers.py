@@ -9,7 +9,6 @@ from tqdm import tqdm
 def read_csv(file_path):
     return pd.read_csv(file_path)
 
-
 def load_dataset():
     # Load datasets
     df_articles = pd.read_csv('input/archive/articles_metadata.csv')
@@ -75,7 +74,7 @@ def process_user_profile(user, embeddings_dict, articles_df):
     
     return X_user, y_user
 
-# Main function to prepare data using multi-CPU processing
+# Main function to prepare data using multi-CPU processing (the difference is not that visible)
 def prepare_data(user_profiles_df_train, articles_df, articles_embeddings_df, max_users=500):
     embeddings_dict = articles_embeddings_df.T.to_dict('list')
     
