@@ -1,52 +1,9 @@
+import os
 import pickle
 import pandas as pd
-import os
-from concurrent.futures import ProcessPoolExecutor
-from multiprocessing import Pool
-
-import progressbar
-import numpy as np
-from scipy.sparse import csr_matrix
-from sklearn.decomposition import PCA
-from surprise import Dataset, Reader, SVD, accuracy
-
-from sklearn.metrics.pairwise import cosine_similarity
-from sklearn.model_selection import train_test_split as train_test_split_sklearn
-from sklearn.preprocessing import normalize
-
-from scipy.sparse.linalg import svds
-
-import matplotlib.pyplot as plt
-import seaborn as sns
-
-import numpy as np
-import pandas as pd
-from sklearn.model_selection import train_test_split
-from sklearn.metrics.pairwise import cosine_similarity
-import tensorflow as tf
-from tensorflow.keras.models import Model
-from tensorflow.keras.layers import Input, Dense, Dot, Flatten
-from tensorflow.keras.optimizers import Adam
-from sklearn.metrics import mean_squared_error
-
-import pandas as pd
-from sklearn.model_selection import train_test_split
-import pandas as pd
+from concurrent.futures import ProcessPoolExecutor, as_completed
 import numpy as np
 from tqdm import tqdm
-
-import tensorflow.keras.backend as K
-import numpy as np
-from sklearn.metrics import roc_auc_score
-
-from tensorflow.keras import layers, models, regularizers
-from sklearn.model_selection import train_test_split
-from tensorflow.keras.layers import Embedding, Input, Lambda
-
-from tensorflow.keras.regularizers import l2
-from sklearn.metrics import roc_auc_score, ndcg_score
-
-import pandas as pd
 
 # Read all csv from clicks folder    
 def read_csv(file_path):
@@ -90,14 +47,6 @@ def preprocessing_clicks(df_clicks):
     df_clicks['click_dayofweek'] = df_clicks['click_timestamp_dt'].dt.dayofweek
     
     return df_clicks
-
-import tensorflow.keras.backend as K
-import numpy as np
-from sklearn.metrics import roc_auc_score
-from tqdm import tqdm
-import numpy as np
-
-from concurrent.futures import ProcessPoolExecutor, as_completed
 
 # Function to process a single user profile
 def process_user_profile(user, embeddings_dict, articles_df):

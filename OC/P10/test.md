@@ -1,172 +1,154 @@
+Explique moi SVD simplement puis à partir de ce code
 ```python
-##### Imports and Dataset Loading #####
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-from sklearn.decomposition import PCA
-from sklearn.model_selection import train_test_split
-from sklearn.metrics.pairwise import cosine_similarity
-from tqdm import tqdm
-import tensorflow as tf
-from tensorflow.keras import layers, models
-from tensorflow.keras.optimizers import Adam
-import pickle
-import json
-from helpers import *
-from sklearn.metrics import mean_squared_error, mean_absolute_error
-import os
-from keras.metrics import RootMeanSquaredError
+from surprise import Dataset, Reader, SVD, accuracy
+from surprise.model_selection import train_test_split, cross_validate
+from sklearn.preprocessing import MinMaxScaler
+from collections import defaultdict
 
+from helpers import load_dataset
 # Load datasets
-df_articles, df_clicks, article_embeddings = load_dataset()
-##### PCA and Variance Plotting #####
-# Fit PCA
-pca = PCA()
-pca.fit(article_embeddings)
-
-# Variance data
-cumulative_variance = np.cumsum(pca.explained_variance_ratio_)
-components = np.arange(len(cumulative_variance)) + 1
-
-# Plotting
-plt.figure(figsize=(10, 4))
-plt.plot(components, cumulative_variance, label='Cumulative Explained Variance')
-plt.xlabel('Number of Components')
-plt.ylabel('Cumulative Variance (%)')
-plt.title('PCA Explained Variance')
-
-# Annotate specific variance percentages
-variance_thresholds = [0.9, 0.95, 0.97, 0.98, 0.99]
-for threshold in variance_thresholds:
-    component_number = np.where(cumulative_variance >= threshold)[0][0]
-    plt.scatter(component_number + 1, cumulative_variance[component_number], color='red')
-    plt.annotate(f"{int(threshold * 100)}%", 
-                 (component_number + 1, cumulative_variance[component_number]),
-                 textcoords="offset points", 
-                 xytext=(0, 10), ha='center')
-
-plt.grid(True)
-plt.show()
-
-# PCA with 98% variance
-pca = PCA(n_components=0.98)
-reduced_embeddings = pca.fit_transform(article_embeddings)
-article_embeddings = reduced_embeddings
-##### Preprocessing #####
-# Preprocess data
-df_articles = preprocessing_articles(df_articles)
-df_clicks = preprocessing_clicks(df_clicks)
-articles_embed_df = pd.DataFrame(article_embeddings)
-
-# Filter articles clicked
-articles_clicked = df_clicks.click_article_id.value_counts().index
-df_articles = df_articles.loc[articles_clicked]
-articles_embed_df = articles_embed_df.loc[articles_clicked]
-
-# Print shapes
-print("df_articles shape:", df_articles.shape)
-print("article_embeddings shape:", articles_embed_df.shape)
-df_articles = df_articles.sample(n=5000)
-df_clicks = df_clicks.sample(n=50000)
-##### Session-based Train-Test Split #####
-def train_test_split_sessions(clicks_df, test_size=0.1, val_size=0.1, random_state=42):
-    session_ids = clicks_df['session_id'].unique()
-    train_sessions, test_sessions = train_test_split(session_ids, test_size=test_size, random_state=random_state)
-    train_sessions, val_sessions = train_test_split(train_sessions, test_size=val_size, random_state=random_state)
-    train_df = clicks_df[clicks_df['session_id'].isin(train_sessions)]
-    val_df = clicks_df[clicks_df['session_id'].isin(val_sessions)]
-    test_df = clicks_df[clicks_df['session_id'].isin(test_sessions)]
-    return train_df, val_df, test_df
-
-# Reduced sample for quicker model building
-# df_clicks = df_clicks.sample(n=500000)
-train_clicks_df, val_clicks_df, test_clicks_df = train_test_split_sessions(df_clicks)
-
-print(f"Training clicks shape: {train_clicks_df.shape}")
-print(f"Validation clicks shape: {val_clicks_df.shape}")
-print(f"Testing clicks shape: {test_clicks_df.shape}")
-##### User Profile Creation #####
-def create_user_profiles(clicks_df, article_embeddings_df):
-    user_profiles = clicks_df.groupby('user_id')['click_article_id'].apply(list).reset_index()
-    embeddings_dict = article_embeddings_df.T.to_dict('list')
-    
-    user_profiles['user_embedding'] = user_profiles['click_article_id'].progress_apply(
-        lambda x: np.mean([embeddings_dict[article] for article in x if article in embeddings_dict], axis=0)
-    )
-    
-    return user_profiles
-
-tqdm.pandas()
-user_profiles_train = create_user_profiles(train_clicks_df, articles_embed_df)
-user_profiles_val = create_user_profiles(val_clicks_df, articles_embed_df)
-user_profiles_test = create_user_profiles(test_clicks_df, articles_embed_df)
-user_profiles_all = create_user_profiles(df_clicks, articles_embed_df)
-def create_content_based_model(input_dim):
-    model = models.Sequential()
-    model.add(layers.Input(shape=(input_dim,)))
-    model.add(layers.Dense(128, activation='relu'))
-    model.add(layers.Dropout(0.2))
-    model.add(layers.Dense(64, activation='relu'))
-    model.add(layers.Dropout(0.2))
-    model.add(layers.Dense(1, activation='sigmoid'))
-    return model
-
-##### Data Preparation #####
-def prepare_data(user_profiles_df, articles_df, articles_embed_df):
-    X, y = [], []
-    embeddings_dict = articles_embed_df.T.to_dict('list')
-
-    for _, user in tqdm(user_profiles_df.iterrows(), total=len(user_profiles_df)):
-        user_embedding = user['user_embedding']
-        clicked_articles = user['click_article_id']
-        
-        for article_id in clicked_articles:
-            if article_id in embeddings_dict:
-                article_embedding = embeddings_dict[article_id]
-                combined_features = np.concatenate((user_embedding, article_embedding))
-                X.append(combined_features)
-                y.append(1) # Positive sample
-        
-        # Add some negative samples for training
-        negative_samples = articles_df[~articles_df['article_id'].isin(clicked_articles)]['article_id'].sample(n=len(clicked_articles))
-        
-        for article_id in negative_samples:
-            if article_id in embeddings_dict:
-                article_embedding = embeddings_dict[article_id]
-                combined_features = np.concatenate((user_embedding, article_embedding))
-                X.append(combined_features)
-                y.append(0) # Negative sample
-                
-    return np.array(X), np.array(y)
-
-pickle_file = 'output/Xy_train_val.pkl'
-if os.path.exists(pickle_file):
-    with open(pickle_file, 'rb') as f:
-        data = pickle.load(f)
-        X_train, y_train, X_val, y_val = data['X_train'], data['y_train'], data['X_val'], data['y_val']
-else:
-    X_train, y_train = prepare_data(user_profiles_train, df_articles, articles_embed_df)
-    X_val, y_val = prepare_data(user_profiles_val, df_articles, articles_embed_df)
-    
-    with open(pickle_file, 'wb') as f:
-        pickle.dump({'X_train': X_train, 'y_train': y_train, 'X_val': X_val, 'y_val': y_val}, f)
-##### Model Training #####
-input_dim = X_train.shape[1]
-content_based_model = create_content_based_model(input_dim)
-
-content_based_model.compile(
-    optimizer=tf.keras.optimizers.legacy.Adam(),
-    loss='binary_crossentropy',
-    metrics=[RootMeanSquaredError()])
-
-# Train the model
-history = content_based_model.fit(
-    X_train, 
-    y_train, 
-    epochs=10, 
-    batch_size=32,
-    validation_data=(X_val, y_val),
+df_articles, df_clicks, _ = load_dataset()
+# Create user profiles based on article clicks
+user_profiles = df_clicks.groupby('user_id')['click_article_id'].apply(list).reset_index()
+article_category_map = df_articles.set_index("article_id")["category_id"].to_dict()
+user_profiles["categories"] = user_profiles["click_article_id"].apply(
+    lambda x: [article_category_map[article_id] for article_id in x]
 )
+user_profiles
+# Merge datasets to get user-article-category information
+df_merged = df_clicks.merge(df_articles, left_on='click_article_id', right_on='article_id')
+df_user_item = df_merged[['user_id', 'article_id', 'category_id']]
+# Create user-article-category interaction counts
+interaction_counts = df_user_item.groupby(['user_id', 'article_id']).size()
+# Convert series to dataframe and reset index
+user_rating_matrix = interaction_counts.to_frame().reset_index()
+user_rating_matrix.rename(columns={0: 'rating'}, inplace=True)
+##### Normalize ratings #####
+scaler = MinMaxScaler(feature_range=(0, 1))
+user_rating_matrix["rating_norm"] = scaler.fit_transform(
+    np.array(user_rating_matrix["rating"]).reshape(-1, 1)
+)
+# Filter out zero normalized ratings
+X = user_rating_matrix[user_rating_matrix["rating_norm"] != 0.0]
+X
 
-##### Evaluate model #####
+##### Prepare dataset for Surprise library #####
+reader = Reader(rating_scale=(0, 1))
+data = Dataset.load_from_df(X[["user_id", "article_id", "rating_norm"]], reader)
+trainset, testset = train_test_split(data, test_size=0.25)
+print("Number of interactions: ", len(X))
+# Train the SVD model and evaluate #####
+svd = SVD()
+svd.fit(trainset)
+predictions = svd.test(testset)
+# Perform cross-validation with additional metrics
+def compute_metrics(predictions):
+    """Compute various evaluation metrics from the predictions."""
+    # Calculate RMSE and MAE
+    metrics = {
+        'rmse': accuracy.rmse(predictions, verbose=False),
+        'mae': accuracy.mae(predictions, verbose=False),
+        'ndcg_5': ndcg_at_k(predictions, k=5),
+        'ndcg_10': ndcg_at_k(predictions, k=10),
+        'mean_mrr': mean_reciprocal_rank(predictions)
+    }
+    return metrics
+def get_top_n(predictions, n=10):
+    """Return the top-N recommendation for each user from a set of predictions.
+
+    Args:
+        predictions (list of Prediction objects): The list of predictions, as
+        returned by the test method of an algorithm.
+        n (int): The number of recommendation to output for each user. Default is 10.
+
+    Returns:
+        dict: A dictionary where keys are user (raw) ids and values are lists of tuples:
+        [(raw item id, category id, rating estimation), ...] of size n.
+    """
+    top_n = defaultdict(list)
+    for uid, iid, true_r, est, _ in predictions:
+        top_n[uid].append((iid, article_category_map[iid], est))
+
+    # Then sort the predictions for each user and retrieve the n highest ones
+    for uid, user_ratings in top_n.items():
+        user_ratings.sort(key=lambda x: x[2], reverse=True)
+        top_n[uid] = user_ratings[:n]
+
+    return top_n
+top_recommendations = get_top_n(predictions)
+top_recommendations
+def ndcg_at_k(predictions, k=5, relevance_threshold=0.1):
+    from collections import defaultdict
+    import math
+    
+    user_est_true = defaultdict(list)
+    for uid, iid, true_r, est, _ in predictions:
+        user_est_true[uid].append((est, true_r))
+    
+    ndcg = 0.0
+    for uid, user_ratings in user_est_true.items():
+        user_ratings.sort(key=lambda x: x[0], reverse=True)
+        
+        print(f"\nUser: {uid}")
+        print(f"Sorted ratings (estimated, true): {user_ratings}")
+        
+        dcg = 0.0
+        idcg = 0.0
+        
+        relevant_ratings = [true_r for est, true_r in user_ratings if true_r > relevance_threshold]
+        for i in range(min(len(relevant_ratings), k)):
+            idcg += 1.0 / math.log2(i + 2)
+        
+        for i, (est, true_r) in enumerate(user_ratings[:k]):
+            if true_r > relevance_threshold:
+                dcg += 1.0 / math.log2(i + 2)
+            print(f"Rank: {i+1}, Estimated Rating: {est}, True Rating: {true_r}, DCG: {dcg}")
+
+        ndcg_value = dcg / idcg if idcg > 0 else 0
+        ndcg += ndcg_value
+        print(f"User NDCG: {ndcg_value}, IDCG: {idcg}")
+
+    final_ndcg = ndcg / len(user_est_true)
+    print(f"\nAverage NDCG@{k}: {final_ndcg}")
+    return final_ndcg
+
+def mean_reciprocal_rank(predictions, relevance_threshold=0.1):
+    from collections import defaultdict
+    
+    user_est_true = defaultdict(list)
+    for uid, iid, true_r, est, _ in predictions:
+        user_est_true[uid].append((est, true_r))
+    
+    mrr = 0.0
+    for uid, user_ratings in user_est_true.items():
+        user_ratings.sort(key=lambda x: x[0], reverse=True)
+        
+        print(f"\nUser: {uid}")
+        print(f"Sorted ratings (estimated, true): {user_ratings}")
+        
+        for rank, (est, true_r) in enumerate(user_ratings):
+            if true_r > relevance_threshold:
+                mrr += 1.0 / (rank + 1)
+                print(f"First relevant rank: {rank+1}, MRR contribution: {1.0/(rank+1)}")
+                break
+
+    final_mrr = mrr / len(user_est_true)
+    print(f"\nMean Reciprocal Rank: {final_mrr}")
+    return final_mrr
+compute_metrics(predictions)
+predictions_all = svd.test(data.build_full_trainset().build_testset())
+all_recommendations = get_top_n(predictions_all)
+def sort_users_by_highest_score(user_scores):
+    user_max_scores = []
+
+    for user, scores in user_scores.items():
+        if scores:  # Check if the list is non-empty
+            highest_score = max(scores, key=lambda x: x[2])[2]
+            user_max_scores.append((user, highest_score))
+
+    sorted_users = sorted(user_max_scores, key=lambda x: x[1], reverse=True)
+    return sorted_users
+sorted_users_by_highest_score = sort_users_by_highest_score(all_recommendations)
 ```
