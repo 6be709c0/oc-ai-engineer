@@ -1,0 +1,7 @@
+Pandas
+pillow
+tensorflow
+pyspark
+pyarrow
+ipykernel
+matplotlib

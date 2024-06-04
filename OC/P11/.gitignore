@@ -1,0 +1,6 @@
+input/
+!input/bootstrap-emr.sh
+.terraform
+img/
+*.csv
+output
