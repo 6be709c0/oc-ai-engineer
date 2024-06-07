@@ -14,6 +14,7 @@ eval $(aws sts assume-role --profile "$INFRA_ACCOUNT_ID" --role-arn "arn:aws:iam
 # Copy data (only on dev account)
 aws s3 cp input/bootstrap-emr.sh s3://267341338450-fruits-oc-data                          
 aws s3 cp input/fruits/fruits-360_dataset/fruits-360/Test s3://267341338450-fruits-oc-data/Test --recursive                      
+aws s3 cp input/Test s3://267341338450-fruits-oc-data/TestSmall --recursive                      
 ```
 
 

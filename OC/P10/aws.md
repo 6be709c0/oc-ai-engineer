@@ -1,4 +1,3 @@
-
 ```sh
 #  The instance used is g4dn.xlarge (0.526 USD per hour) with the AMI: `Deep Learning OSS Nvidia Driver AMI GPU PyTorch 2.2.0 (Ubuntu 20.04) 202404101`
 
@@ -90,4 +89,4 @@ ssh -N -f -L 8888:localhost:8888 ubuntu@$PUBLIC_IP
 ssh -N -f -L 8887:localhost:8888 ubuntu@34.229.126.140
 
 pkill -f "ssh -N -f -L 8888:localhost:8888"  
-```
+`````
